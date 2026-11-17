@@ -13,6 +13,9 @@
 
 ## Запуск
 
+Подробная инструкция — запуск, кооператив, деплой, TURN и диагностика:
+**[docs/RUN.md](docs/RUN.md)**.
+
 Нужен Node.js 18+ (или любой статический HTTP-сервер — ES-модули не работают через `file://`).
 
 ```bat
@@ -375,6 +378,8 @@ GitHub Actions: `.github/workflows/cloudflare.yml` деплоит при пуш�
 в секретах репозитория заданы `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`;
 без них шаг деплоя пропускается.
 
+Пошагово, с TURN и разбором ошибок — **[docs/RUN.md](docs/RUN.md)**.
+
 ## Технические детали
 
 - **Three.js r170** лежит локально в `vendor/three.module.js` — интернет не нужен.
@@ -404,6 +409,7 @@ styles.css            оформление интерфейса
 server.js             локальный статик-сервер + сигнальный API
 start.bat             запуск на Windows
 wrangler.jsonc        конфиг Cloudflare Worker
+docs/RUN.md           запуск, деплой, TURN, диагностика
 worker/
   index.js            Worker: статика + /api/rooms
   room.js             Durable Object комнаты (только SDP)
