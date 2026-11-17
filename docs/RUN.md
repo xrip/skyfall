@@ -81,6 +81,8 @@ npm run cf:deploy  # сборка public/ + деплой
 
 Wrangler в конце печатает адрес вида
 `https://skyfall.<ваш-поддомен>.workers.dev` — это и есть ссылка для друзей.
+Если это первый Worker в аккаунте, Cloudflare может попросить зарегистрировать
+поддомен `workers.dev` — сделайте это один раз в панели **Workers & Pages**.
 
 Что происходит под капотом:
 
@@ -110,13 +112,36 @@ npx wrangler deployments list  # история версий
 
 ### GitHub Actions
 
-`.github/workflows/cloudflare.yml` деплоит при пуше в `master`/`main`, если
-в репозитории заданы секреты:
+Один раз добавьте ключ Cloudflare — дальше каждый пуш в `master`/`main`
+деплоит игру сам.
 
-- `CLOUDFLARE_API_TOKEN` — токен с правом **Workers Scripts: Edit**;
-- `CLOUDFLARE_ACCOUNT_ID` — ID аккаунта (виден в панели Cloudflare).
+1. **Cloudflare → My Profile → API Tokens → Create Token**.
+2. Шаблон **«Edit Cloudflare Workers»** → **Create Token** → скопируйте
+   значение (показывается один раз).
+3. **GitHub → Settings → Secrets and variables → Actions → New repository
+   secret**:
+   - имя: `CLOUDFLARE_API_TOKEN`
+   - значение: токен из Cloudflare.
+4. Следующий пуш запускает `.github/workflows/cloudflare.yml`.
 
-Без секретов шаг деплоя пропускается, workflow остаётся зелёным.
+Что делает workflow:
+
+- проверяет, что секрет задан (иначе пропускает деплой и остаётся зелёным);
+- ставит wrangler;
+- сам определяет аккаунт по токену через `tools/cf-account.mjs`;
+- собирает `public/` и вызывает `wrangler deploy`;
+- пишет адрес игры в Summary запуска.
+
+Если аккаунтов несколько, добавьте второй секрет `CLOUDFLARE_ACCOUNT_ID`
+с нужным id — он используется вместо автоопределения.
+
+Запустить вручную: **Actions → Deploy SKYFALL to Cloudflare → Run workflow**.
+
+Проверить токен локально:
+
+```bash
+CLOUDFLARE_API_TOKEN=... node tools/cf-account.mjs
+```
 
 ### Лимиты бесплатного плана
 

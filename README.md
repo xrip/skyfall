@@ -374,9 +374,10 @@ npm run cf:deploy
 вообще не нагружает. Сигнальные данные комнаты живут 20 минут и удаляются
 по alarm.
 
-GitHub Actions: `.github/workflows/cloudflare.yml` деплоит при пуше, если
-в секретах репозитория заданы `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`;
-без них шаг деплоя пропускается.
+GitHub Actions: добавьте один секрет `CLOUDFLARE_API_TOKEN` (шаблон
+«Edit Cloudflare Workers») — и каждый пуш в `master` будет деплоить игру.
+Аккаунт определится по токену сам; `CLOUDFLARE_ACCOUNT_ID` нужен только
+если аккаунтов несколько.
 
 Пошагово, с TURN и разбором ошибок — **[docs/RUN.md](docs/RUN.md)**.
 
@@ -415,6 +416,7 @@ worker/
   room.js             Durable Object комнаты (только SDP)
   json.js             JSON-ответы
 tools/build-public.mjs  сборка public/ для Workers Assets
+tools/cf-account.mjs    определение account id по токену (CI)
 vendor/three.module.js
 src/
   main.js             точка входа
