@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>SKYFALL — Небесный рубеж</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%230b111b'/%3E%3Cpath d='M5 25h22v4H5z' fill='%23ffb144'/%3E%3Cpath d='M8 11h16v14H8z' fill='%236c9c42'/%3E%3Cpath d='M8 11h16v4H8z' fill='%237fb04c'/%3E%3Cpath d='M12 16h8v9h-8z' fill='%235a3a21'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hidden">
+    <div id="zone-overlay"></div>
+    <div id="crosshair">
+      <span class="ch ch-t"></span><span class="ch ch-b"></span>
+      <span class="ch ch-l"></span><span class="ch ch-r"></span>
+      <span class="ch-dot"></span>
+      <div id="hitmarker"></div>
+      <div id="mine-ring"></div>
+    </div>
+
+    <div id="hazard-warning" class="hidden"></div>
+
+    <div id="topbar">
+      <div id="wave-box">
+        <div class="wave-kicker" id="wave-kicker">ФАЗА</div>
+        <div id="wave-title">ПОДГОТОВКА</div>
+        <div id="wave-sub">Соберите лут и постройте укрепления</div>
+        <div id="wave-timer">00:40</div>
+      </div>
+      <div id="boss-box" class="hidden">
+        <div id="boss-name">ТИТАН</div>
+        <div class="boss-bar"><i id="boss-fill"></i></div>
+      </div>
+    </div>
+
+    <div id="health-box" class="panel">
+      <div class="panel-label">ЗДОРОВЬЕ</div>
+      <div class="h-bar"><i id="health-fill"></i></div>
+      <div id="health-text">100</div>
+      <div class="sub-stat"><span id="kills-text">0</span> УБИЙСТВ</div>
+      <div class="armor-line"><span>БРОНЯ</span><b id="dr-text">0%</b><i id="set-text" class="set-name">НЕТ</i></div>
+      <div class="armor-line shield"><span>ЩИТ</span><div class="a-bar"><i id="armor-fill"></i></div><b id="armor-text">0</b></div>
+      <div class="zone-line" id="zone-line"><span id="zone-name">ОБЫЧНАЯ ЗОНА</span><b id="zone-hint"></b></div>
+      <div class="coin-line"><i class="coin-icon"></i><b id="coin-text">0</b> МОНЕТ</div>
+    </div>
+
+    <div id="ammo-box">
+      <div id="weapon-type">ПИСТОЛЕТ</div>
+      <div id="weapon-name">КЛЫК-12</div>
+      <div id="ammo-nums"><span id="ammo-mag">12</span><span id="ammo-res">/ 72</span></div>
+      <div id="reload-hint" class="hidden">ПЕРЕЗАРЯДКА <span>R</span></div>
+    </div>
+
+    <div id="minimap-wrap">
+      <canvas id="minimap" width="220" height="220"></canvas>
+      <div class="map-ring"></div>
+      <div id="map-n">С</div>
+      <div id="chest-counter">СУНДУКИ <b id="chest-count">0 / 8</b></div>
+    </div>
+
+    <div id="friend-box" class="hidden">
+      <div class="friend-top"><span class="dot"></span><span id="friend-name">ДРУГ</span><b id="friend-hp">100</b></div>
+      <div class="friend-bar"><i id="friend-fill"></i></div>
+    </div>
+
+    <div id="hotbar"></div>
+    <div id="compass-hint"></div>
+    <div id="loot-feed"></div>
+    <div id="prompt" class="hidden"><b>E</b> <span>Открыть сундук</span></div>
+    <div id="hints">
+      <span><b>WASD</b> движение</span>
+      <span><b>ЛКМ</b> огонь / добыча</span>
+      <span><b>ПКМ</b> блок</span>
+      <span><b>E</b> сундук</span>
+      <span><b>I</b> инвентарь</span>
+      <span><b>R</b> перезарядка</span>
+      <span><b>H</b> помощь</span>
+    </div>
+
+    <div id="banner" class="hidden">
+      <div id="banner-kicker"></div>
+      <div id="banner-title"></div>
+      <div id="banner-sub"></div>
+    </div>
+
+    <div id="dmg-vignette"></div>
+    <div id="heal-vignette"></div>
+    <div id="low-hp"></div>
+    <div id="muzzle-flash"></div>
+    <div id="enemy-bars"></div>
+    <div id="float-texts"></div>
+  </div>
+
+  <div id="help" class="hidden">
+    <div class="help-head">
+      <span>УПРАВЛЕНИЕ</span>
+      <button id="help-close">ЗАКРЫТЬ [H]</button>
+    </div>
+    <div class="help-grid">
+      <div><b>W A S D</b><span>Движение</span></div>
+      <div><b>SHIFT</b><span>Присед (не даёт упасть с края)</span></div>
+      <div><b>W ×2</b><span>Бег</span></div>
+      <div><b>SPACE</b><span>Прыжок</span></div>
+      <div><b>ЛКМ</b><span>Стрельба / добыча блока</span></div>
+      <div><b>ПКМ</b><span>Поставить блок / прицел</span></div>
+      <div><b>E</b><span>Открыть сундук</span></div>
+      <div><b>R</b><span>Перезарядка</span></div>
+      <div><b>I</b><span>Инвентарь и снаряжение</span></div>
+      <div><b>1–9 / колесо</b><span>Выбор слота</span></div>
+      <div><b>7 / 8</b><span>Оружие</span></div>
+      <div><b>9 + ЛКМ</b><span>Использовать аптечку</span></div>
+      <div><b>Q</b><span>Сменить оружие</span></div>
+      <div><b>ESC</b><span>Пауза</span></div>
+    </div>
+    <div class="help-tip">Кирка ломает любые блоки. Добыча и лут попадают в инвентарь — откройте его клавишей I и назначьте блоки в слоты 2–6, а оружие — в 7 или 8. Сундуки подсвечены золотыми лучами. ENTER во время подготовки запускает волну досрочно. В вулканической зоне не стойте на магме, а в радиационной надевайте сет химзащиты.</div>
+  </div>
+
+  <!-- ===================== МЕНЮ ===================== -->
+  <div id="menu" class="screen">
+    <div class="vignette"></div>
+    <div class="menu-inner">
+      <div class="eyebrow" id="menu-eyebrow">ВЫСАДКА · НЕБЕСНЫЙ ОСТРОВ</div>
+      <h1 class="title">SKYFALL<span>НЕБЕСНЫЙ РУБЕЖ</span></h1>
+      <p class="tagline" id="menu-tagline">
+        Ты один на осколке мира. Обыщи локации, выбей оружие и строй укрепления —
+        выбери режим и сложность ниже.
+      </p>
+      <div class="run-setup">
+        <div class="setup-group">
+          <span class="setup-label">РЕЖИМ</span>
+          <div class="setup-chips" id="mode-chips">
+            <button class="chip active" data-mode="campaign"><b>КАМПАНИЯ</b><small>3 волны</small></button>
+            <button class="chip" data-mode="endless"><b>БЕСКОНЕЧНЫЙ</b><small>атаки каждые 4 мин</small></button>
+            <button class="chip" data-mode="sandbox"><b>ПЕСОЧНИЦА</b><small>всё и бесконечно</small></button>
+          </div>
+        </div>
+        <div class="setup-group">
+          <span class="setup-label">СЛОЖНОСТЬ</span>
+          <div class="setup-chips" id="difficulty-chips">
+            <button class="chip" data-difficulty="easy"><b>ЛЕГКО</b><small>для стройки</small></button>
+            <button class="chip active" data-difficulty="normal"><b>НОРМАЛЬНО</b><small>баланс</small></button>
+            <button class="chip" data-difficulty="hard"><b>СЛОЖНО</b><small>+30% HP</small></button>
+            <button class="chip" data-difficulty="nightmare"><b>КОШМАР</b><small>жестоко</small></button>
+          </div>
+        </div>
+      </div>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn primary"><span id="play-label">В БОЙ</span><small id="play-sub">кампания · нормально</small></button>
+        <button id="btn-coop" class="btn ghost"><span>КООПЕРАТИВ</span><small>по сети · 2 игрока</small></button>
+        <button id="btn-help-menu" class="btn ghost"><span>КАК ИГРАТЬ</span><small>управление и правила</small></button>
+      </div>
+      <div class="menu-cards">
+        <div class="mcard"><b>01</b><h3>ЛУТ</h3><p>22 сундука: 11 локаций на острове и дирижабль с частями оружия.</p></div>
+        <div class="mcard"><b>02</b><h3>МИР</h3><p>Каждый забег — новые цвета, небо и планировка. Вулкан с магмой и зона радиации.</p></div>
+        <div class="mcard"><b>03</b><h3>РЕЖИМЫ</h3><p>Кампания, бесконечные атаки каждые 4 минуты или песочница со всем открытым.</p></div>
+      </div>
+    </div>
+    <div class="menu-foot">
+      <span>FPS · ВОКСЕЛЬНЫЙ ПЕСОЧНИЦА-ШУТЕР</span>
+      <span>WASD + МЫШЬ · НАУШНИКИ РЕКОМЕНДУЮТСЯ</span>
+    </div>
+  </div>
+
+  <!-- ===================== ИНВЕНТАРЬ ===================== -->
+  <div id="inventory" class="screen compact hidden">
+    <div class="inv-card">
+      <div class="inv-head">
+        <div>
+          <div class="eyebrow">СНАРЯЖЕНИЕ · БЛОКИ · РЕСУРСЫ</div>
+          <h2>ИНВЕНТАРЬ</h2>
+        </div>
+        <button id="inv-close" class="btn ghost small">ЗАКРЫТЬ [I]</button>
+      </div>
+      <div class="inv-hint" id="inv-hint">Выберите слот хотбара 2–6, затем блок из списка.</div>
+      <div class="inv-hotbar" id="inv-hotbar"></div>
+      <div class="inv-grid">
+        <section class="inv-section">
+          <div class="inv-sec-head"><h3>БЛОКИ</h3><span>клик — в выбранный слот</span></div>
+          <div class="inv-items" id="inv-blocks"></div>
+          <div class="inv-sec-head"><h3>БРОНЯ</h3><span>защита <b id="inv-dr">0%</b></span></div>
+          <div class="inv-armor-slots" id="inv-armor-slots"></div>
+          <div class="inv-armor" id="inv-armor"></div>
+        </section>
+        <section class="inv-section">
+          <div class="inv-sec-head"><h3>ОРУЖИЕ</h3><span>слоты 7 и 8</span></div>
+          <div class="inv-weapons" id="inv-weapons"></div>
+          <div class="inv-sec-head"><h3>РАСХОДНИКИ</h3><span></span></div>
+          <div class="inv-items" id="inv-cons"></div>
+          <div class="inv-sec-head"><h3>БОЕЗАПАС</h3><span>запас</span></div>
+          <div class="inv-ammo" id="inv-ammo"></div>
+        </section>
+      </div>
+      <div class="inv-foot">
+        Блоки — в слоты <b>2–6</b>, оружие — <b>7</b>/<b>8</b>. Броня надевается кликом по предмету.
+        <span>I или Esc — закрыть. В кооперативе пауза общая.</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-remote" class="hidden">
+    <div class="inv-remote-card">
+      <div class="eyebrow" id="inv-remote-eyebrow">ПАУЗА · СЕТЕВАЯ ИГРА</div>
+      <h2 id="inv-remote-title">НАПАРНИК В ИНВЕНТАРЕ</h2>
+      <p id="inv-remote-sub">Игра приостановлена для обоих. Нажмите <b>I</b>, чтобы открыть свой инвентарь.</p>
+    </div>
+  </div>
+
+  <!-- ===================== МАГАЗИН ===================== -->
+  <div id="shop" class="screen compact hidden">
+    <div class="shop-card">
+      <div class="shop-head">
+        <div>
+          <div class="eyebrow">ТОРГОВЛЯ · НЕБЕСНЫЙ ОСТРОВ</div>
+          <h2>ПИЖОНЧИК</h2>
+        </div>
+        <div class="shop-balance"><span>◈</span> <b id="shop-coins">0</b> монет</div>
+        <button id="shop-close" class="btn ghost small">ЗАКРЫТЬ [Esc]</button>
+      </div>
+      <p class="shop-sub">Патроны, стволы и щиты. Монеты падают с мобов и лежат в сундуках. Покупки — личные.</p>
+      <div id="shop-items" class="shop-items"></div>
+      <div class="shop-foot">Оружие при занятых слотах 7–8 попадёт в инвентарь. Броня выпадает с мобов и из сундуков — наденьте её в инвентаре. Щит поглощает половину урона, пока не сломается.</div>
+    </div>
+  </div>
+
+  <!-- ===================== КООПЕРАТИВ ===================== -->
+  <!-- ===================== СТОЛ ОРУЖЕЙНИКА ===================== -->
+  <div id="bench" class="screen compact hidden">
+    <div class="bench-card">
+      <div class="bench-head">
+        <div>
+          <div class="eyebrow">ВЕРСТАК · ОРУЖИЕ</div>
+          <h2>СТОЛ ОРУЖЕЙНИКА</h2>
+        </div>
+        <div class="shop-balance"><span>◈</span> <b id="bench-coins">0</b> монет</div>
+        <button id="bench-close" class="btn ghost small">ЗАКРЫТЬ [Esc]</button>
+      </div>
+      <p class="shop-sub">Ставьте прицелы, глушители и магазины, красьте стволы и улучшайте их за монеты.</p>
+      <div class="bench-layout">
+        <aside class="bench-weapons" id="bench-weapons"></aside>
+        <section class="bench-main">
+          <div class="bench-weapon-head">
+            <div>
+              <div class="eyebrow" id="bench-type">ОРУЖИЕ</div>
+              <h3 id="bench-name">—</h3>
+            </div>
+            <span class="bench-level" id="bench-level">0 / 5</span>
+          </div>
+          <div class="bench-stats" id="bench-stats"></div>
+          <div class="bench-sec-head">ЧАСТИ <span id="bench-parts-hint">в инвентаре</span></div></div>
+          <div class="bench-parts" id="bench-parts"></div>
+          <div class="bench-sec-head">КРАСКА</div>
+          <div class="bench-paints" id="bench-paints"></div>
+          <button class="buy-btn bench-upgrade" id="bench-upgrade" data-bench-upgrade>УЛУЧШИТЬ</button>
+        </section>
+      </div>
+      <div class="shop-foot">Части выпадают из сундуков. Улучшение повышает урон на 10% за уровень. Окраска меняет цвет модели оружия.</div>
+    </div>
+  </div>
+
+  <!-- ===================== ПРИШЕЛЕЦ ===================== -->
+  <div id="alien" class="screen compact hidden">
+    <div class="shop-card alien-card">
+      <div class="shop-head">
+        <div>
+          <div class="eyebrow">ТОРГОВЕЦ С НЕБА · ПОСЛЕ 2-Й ВОЛНЫ</div>
+          <h2 class="alien-title">ПРИШЕЛЕЦ</h2>
+        </div>
+        <div class="shop-balance"><span>◈</span> <b id="alien-coins">0</b> монет</div>
+        <button id="alien-close" class="btn ghost small">ЗАКРЫТЬ [Esc]</button>
+      </div>
+      <p class="shop-sub">Пришелец приземлился после второй волны. Лазерная пушка и плазмоган — по 333 монеты.</p>
+      <div id="alien-items" class="shop-items"></div>
+      <div class="shop-foot">Товар уникальный: после покупки оружие появляется в слоте 7 или 8 / в инвентаре.</div>
+    </div>
+  </div>
+
+  <div id="coop" class="screen compact hidden">
+    <div class="coop-card">
+      <div class="eyebrow">СЕТЕВАЯ ВЫСАДКА · 2 ИГРОКА</div>
+      <h2>КООПЕРАТИВ</h2>
+      <p class="pause-sub">Один остров, два защитника. Лут и постройки общие, патроны — у каждого свои.</p>
+      <div class="coop-grid">
+        <div class="coop-panel">
+          <h3>СОЗДАТЬ ЛОББИ</h3>
+          <p>Откройте комнату и передайте код другу. Можно начать и одному — друг подключится по ходу.</p>
+          <button id="btn-host-room" class="btn primary small">СОЗДАТЬ КОМНАТУ</button>
+          <div id="host-info" class="hidden">
+            <div class="room-label">КОД КОМНАТЫ</div>
+            <div class="room-code" id="room-code">----</div>
+            <div class="coop-status" id="host-status">Ждём подключения друга…</div>
+            <button id="btn-host-start" class="btn primary small">НАЧАТЬ ОПЕРАЦИЮ</button>
+          </div>
+        </div>
+        <div class="coop-panel">
+          <h3>ПРИСОЕДИНИТЬСЯ</h3>
+          <p>Введите четырёхзначный код комнаты, которую открыл друг.</p>
+          <input id="room-input" maxlength="4" placeholder="КОД" autocomplete="off" spellcheck="false" />
+          <button id="btn-join-room" class="btn ghost small">ПОДКЛЮЧИТЬСЯ</button>
+          <div class="coop-status" id="join-status"></div>
+        </div>
+      </div>
+      <div class="coop-foot">
+        Друг открывает этот же адрес в браузере на вашем ПК или в локальной сети и вводит код.
+        Если игра запущена через <b>start.bat</b>, адрес для друга показан в окне сервера.
+      </div>
+      <button id="btn-coop-close" class="btn ghost small">НАЗАД</button>
+    </div>
+  </div>
+
+  <!-- ===================== ПАУЗА ===================== -->
+  <div id="pause" class="screen compact hidden">
+    <div class="pause-card">
+      <div class="eyebrow">ПАУЗА</div>
+      <h2>ПЕРЕДЫШКА</h2>
+      <p class="pause-sub">Остров не убежит. Наверное.</p>
+      <div class="pause-buttons">
+        <button id="btn-resume" class="btn primary small">ПРОДОЛЖИТЬ</button>
+        <button id="btn-restart" class="btn ghost small">НАЧАТЬ ЗАНОВО</button>
+        <button id="btn-menu" class="btn ghost small">В МЕНЮ</button>
+      </div>
+      <div class="pause-controls">
+        <span><b>WASD</b> движение</span><span><b>ЛКМ</b> огонь / добыча</span>
+        <span><b>ПКМ</b> поставить блок</span><span><b>E</b> сундук</span>
+        <span><b>R</b> перезарядка</span><span><b>I</b> инвентарь</span>
+        <span><b>H</b> помощь</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ФИНАЛ ===================== -->
+  <div id="end" class="screen compact hidden">
+    <div class="end-card">
+      <div id="end-kicker" class="eyebrow">ОПЕРАЦИЯ ЗАВЕРШЕНА</div>
+      <h2 id="end-title">ОСТРОВ ВЫСТОЯЛ</h2>
+      <p id="end-sub">Три волны. Ни одного пробитого брешка. Почти.</p>
+      <div class="stats">
+        <div class="stat"><span id="stat-waves-label">ВОЛНЫ</span><b id="stat-waves">3 / 3</b></div>
+        <div class="stat"><span>УБИЙСТВА</span><b id="stat-kills">0</b></div>
+        <div class="stat"><span>СУНДУКИ</span><b id="stat-chests">0 / 8</b></div>
+        <div class="stat"><span>БЛОКИ</span><b id="stat-blocks">0 / 0</b></div>
+        <div class="stat"><span>ТОЧНОСТЬ</span><b id="stat-acc">0%</b></div>
+        <div class="stat"><span>ВРЕМЯ</span><b id="stat-time">00:00</b></div>
+      </div>
+      <div class="end-actions">
+        <button id="btn-again" class="btn primary small">ЕЩЁ РАЗ</button>
+        <button id="btn-end-menu" class="btn ghost small">В МЕНЮ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading"><span></span><b>ГЕНЕРАЦИЯ ОСТРОВА</b></div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
