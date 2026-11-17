@@ -304,9 +304,21 @@
         </div>
       </div>
       <div class="coop-foot">
-        Друг открывает этот же адрес в браузере на вашем ПК или в локальной сети и вводит код.
-        Если игра запущена через <b>start.bat</b>, адрес для друга показан в окне сервера.
+        Соединение <b>прямое (P2P, WebRTC)</b>: Worker нужен только чтобы обменяться
+        кодами и отпустить игроков. Друг открывает этот же адрес и вводит код.
       </div>
+      <details class="coop-adv">
+        <summary>Свой TURN-сервер — если прямое соединение не проходит</summary>
+        <p>Обычно не нужен: хватает STUN. TURN помогает за строгим NAT и в мобильных сетях.</p>
+        <input id="turn-url" placeholder="turn:example.com:3478" autocomplete="off" spellcheck="false" />
+        <div class="coop-adv-row">
+          <input id="turn-user" placeholder="логин" autocomplete="off" spellcheck="false" />
+          <input id="turn-pass" type="password" placeholder="пароль" autocomplete="off" />
+        </div>
+        <button id="btn-turn-save" class="btn ghost small">СОХРАНИТЬ</button>
+        <button id="btn-turn-clear" class="btn ghost small">СБРОСИТЬ</button>
+        <div class="coop-status" id="turn-status"></div>
+      </details>
       <button id="btn-coop-close" class="btn ghost small">НАЗАД</button>
     </div>
   </div>

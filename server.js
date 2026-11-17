@@ -21,9 +21,156 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
-const server = http.createServer((req, res) => {
+/* ============================================================
+   Signaling API for P2P co-op (same protocol as the Cloudflare Worker)
+   ============================================================ */
+const signals = new Map();
+const SIGNAL_TTL = 20 * 60 * 1000;
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function newCode() {
+  let code = '';
+  for (let i = 0; i < 4; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  return code;
+}
+
+function sendJson(res, status, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(body);
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 256 * 1024) req.destroy();
+    });
+    req.on('end', () => {
+      try { resolve(raw ? JSON.parse(raw) : {}); } catch (e) { resolve({}); }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+async function handleApi(req, res, path, query) {
+  if (path === '/api/rooms') {
+    if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
+    let code;
+    do { code = newCode(); } while (signals.has(code));
+    const room = {
+      code,
+      host: crypto.randomBytes(16).toString('hex'),
+      guest: null,
+      session: 0,
+      msgs: [],
+      seq: 0,
+      closed: false,
+      touched: Date.now(),
+    };
+    signals.set(code, room);
+    sendJson(res, 200, { code, token: room.host, role: 'host', seq: 0, session: 0 });
+    return;
+  }
+
+  const m = path.match(/^\/api\/rooms\/([A-Za-z0-9]{2,8})\/(join|poll|signal|leave)$/);
+  if (!m) { sendJson(res, 404, { error: 'Неизвестный запрос' }); return; }
+
+  const code = m[1].toUpperCase();
+  const action = m[2];
+  const room = signals.get(code);
+  if (!room) { sendJson(res, 404, { error: 'Комната не найдена' }); return; }
+  room.touched = Date.now();
+
+  if (action === 'join') {
+    if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
+    if (room.closed) { sendJson(res, 410, { error: 'Комната закрыта' }); return; }
+    if (room.guest) { sendJson(res, 409, { error: 'В комнате уже двое' }); return; }
+    room.guest = crypto.randomBytes(16).toString('hex');
+    room.session++;
+    room.msgs = [];
+    sendJson(res, 200, { code, token: room.guest, role: 'guest', seq: room.seq, session: room.session });
+    return;
+  }
+
+  const token = query.get('token');
+  if (token !== room.host && token !== room.guest) {
+    sendJson(res, 403, { error: 'Нет доступа к комнате' });
+    return;
+  }
+
+  if (action === 'signal') {
+    if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
+    const body = await readJsonBody(req);
+    room.seq++;
+    room.msgs.push({
+      n: room.seq,
+      from: token === room.host ? 'host' : 'guest',
+      data: body && body.data !== undefined ? body.data : null,
+    });
+    if (room.msgs.length > 40) room.msgs.splice(0, room.msgs.length - 40);
+    sendJson(res, 200, { ok: true, seq: room.seq });
+    return;
+  }
+
+  if (action === 'poll') {
+    const since = Number(query.get('since')) || 0;
+    const me = token === room.host ? 'host' : 'guest';
+    sendJson(res, 200, {
+      seq: room.seq,
+      msgs: room.msgs.filter((msg) => msg.n > since && msg.from !== me),
+      session: room.session,
+      guest: !!room.guest,
+      closed: room.closed,
+    });
+    return;
+  }
+
+  if (action === 'leave') {
+    if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
+    if (token === room.host) {
+      room.closed = true;
+      setTimeout(() => signals.delete(code), 30000);
+    } else {
+      room.guest = null;
+      room.msgs = [];
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  sendJson(res, 404, { error: 'Неизвестный запрос' });
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, room] of signals) {
+    if (now - room.touched > SIGNAL_TTL) signals.delete(code);
+  }
+}, 60000).unref();
+
+const server = http.createServer(async (req, res) => {
   try {
-    const url = decodeURIComponent((req.url || '/').split('?')[0]);
+    const parsed = new URL(req.url || '/', 'http://localhost');
+    const url = decodeURIComponent(parsed.pathname);
+    if (url.startsWith('/api/')) {
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        });
+        res.end();
+        return;
+      }
+      await handleApi(req, res, url, parsed.searchParams);
+      return;
+    }
     let rel = url === '/' ? '/index.html' : url;
     rel = rel.replace(/\.\./g, '').replace(/\\/g, '/');
     const file = path.join(ROOT, rel);
@@ -44,7 +191,8 @@ const server = http.createServer((req, res) => {
       fs.createReadStream(file).pipe(res);
     });
   } catch (e) {
-    res.writeHead(500); res.end('500');
+    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('500');
   }
 });
 
@@ -62,7 +210,7 @@ server.listen(PORT, '0.0.0.0', () => {
     }
   }
   console.log('  ---------------------------------------------');
-  console.log('  Кооператив: откройте игру, «КООПЕРАТИВ» → комната.');
+  console.log('  Кооператив: P2P через WebRTC, сервер только для сигналинга.');
   console.log('  Ctrl+C — остановить сервер');
   console.log('');
   if (process.platform === 'win32' && !process.env.NO_OPEN) {

@@ -14,6 +14,7 @@ import { Player } from './player.js';
 import { Mob, Chest, Projectile, Pickup, PlayerAvatar, Merchant, GunsmithBench, AlienMerchant } from './entities.js';
 import { UI } from './ui.js';
 import { Net } from './net.js';
+import { loadTurn, saveTurn } from './rtc.js';
 
 const $ = (id) => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -1097,6 +1098,7 @@ export class Game {
     $('room-input').value = '';
     $('btn-join-room').disabled = false;
     $('btn-host-room').textContent = 'СОЗДАТЬ КОМНАТУ';
+    this.fillTurnFields();
     if (this.netRole === 'host' && this.lobbyCode) {
       $('host-info').classList.remove('hidden');
       $('room-code').textContent = this.lobbyCode;
@@ -1132,11 +1134,39 @@ export class Game {
     el.className = 'coop-status' + (cls ? ' ' + cls : '');
   }
 
+  fillTurnFields() {
+    const turn = loadTurn();
+    $('turn-url').value = turn ? turn.urls.join(',') : '';
+    $('turn-user').value = turn ? turn.username || '' : '';
+    $('turn-pass').value = turn ? turn.credential || '' : '';
+    this.setCoopStatus('turn-status', turn ? 'TURN задан — используется при соединении.' : '', turn ? 'ok' : '');
+  }
+
+  saveTurnSettings() {
+    const urls = ($('turn-url').value || '').trim();
+    if (!urls) {
+      this.setCoopStatus('turn-status', 'Укажите адрес TURN, например turn:host:3478', 'err');
+      return;
+    }
+    saveTurn({
+      urls,
+      username: ($('turn-user').value || '').trim(),
+      credential: $('turn-pass').value || '',
+    });
+    this.setCoopStatus('turn-status', 'Сохранено. Применится к следующему соединению.', 'ok');
+  }
+
+  clearTurnSettings() {
+    saveTurn(null);
+    this.fillTurnFields();
+    this.setCoopStatus('turn-status', 'TURN отключён — используется только STUN.');
+  }
+
   createRoom() {
     this.sound.init();
     this.sound.resume();
     this.netRole = null;
-    this.setCoopStatus('host-status', 'Подключение к серверу…');
+    this.setCoopStatus('host-status', 'Создаём комнату…');
     $('btn-host-room').disabled = true;
     this.net.hostRoom();
   }
@@ -1155,7 +1185,7 @@ export class Game {
     }
     this.sound.init();
     this.sound.resume();
-    this.setCoopStatus('join-status', 'Подключение…');
+    this.setCoopStatus('join-status', 'Ищем комнату…');
     $('btn-join-room').disabled = true;
     this.net.joinRoom(code);
   }
@@ -3125,6 +3155,8 @@ export class Game {
     $('btn-host-start').addEventListener('click', () => this.startHostRun());
     $('btn-join-room').addEventListener('click', () => this.joinRoom());
     $('btn-coop-close').addEventListener('click', () => this.closeCoop());
+    $('btn-turn-save').addEventListener('click', () => this.saveTurnSettings());
+    $('btn-turn-clear').addEventListener('click', () => this.clearTurnSettings());
     $('room-input').addEventListener('keydown', (e) => {
       if (e.code === 'Enter') this.joinRoom();
       e.stopPropagation();
