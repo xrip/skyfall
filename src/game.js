@@ -2573,8 +2573,9 @@ export class Game {
     const chip = $('scroll-chip');
     if (!chip) return;
     const n = this.player.bossScrolls || 0;
-    if (n > 0 && !this.dungeonActive) {
-      chip.innerHTML = `СВИТОК ПЕРЕМЕЩЕНИЯ ×${n} · <b>T</b>`;
+    const infinite = this.player.sandbox || this.player.bossScrolls === Infinity;
+    if ((n > 0 || infinite) && !this.dungeonActive) {
+      chip.innerHTML = `СВИТОК ПЕРЕМЕЩЕНИЯ ${infinite ? '∞' : '×' + n} · <b>T</b>`;
       chip.classList.remove('hidden');
     } else {
       chip.classList.add('hidden');
@@ -2584,11 +2585,12 @@ export class Game {
   useBossScroll() {
     if (this.dungeonActive) return;
     if (!this.player.alive) return;
-    if (!(this.player.bossScrolls > 0)) {
+    const infinite = this.player.sandbox || this.player.bossScrolls === Infinity;
+    if (!infinite && !(this.player.bossScrolls > 0)) {
       this.ui.feed('Нет свитка перемещения', true);
       return;
     }
-    this.player.bossScrolls--;
+    if (!infinite) this.player.bossScrolls--;
     this.updateScrollHint();
     this.enterDungeon();
   }

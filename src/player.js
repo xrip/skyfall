@@ -646,6 +646,7 @@ export class Player {
     this.sandbox = true;
     this.infiniteAmmo = true;
     this.infiniteBlocks = true;
+    this.bossScrolls = Infinity;
     for (const key of Object.keys(WEAPONS)) {
       const cfg = WEAPONS[key];
       if (cfg.bossOnly) continue;

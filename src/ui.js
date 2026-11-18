@@ -759,6 +759,23 @@ export class UI {
     drawMedkitIcon(med.querySelector('canvas').getContext('2d'));
     this.invCons.appendChild(med);
 
+    if (player.bossScrolls > 0 || player.sandbox) {
+      const infinite = player.sandbox || player.bossScrolls === Infinity;
+      const scroll = document.createElement('div');
+      scroll.className = 'inv-item';
+      scroll.innerHTML = `<canvas width="32" height="32"></canvas>
+        <span class="iname"><b>Свиток перемещения</b><span>${infinite ? '∞ · клавиша T' : `${player.bossScrolls} шт. · T`}</span></span>`;
+      const sc = scroll.querySelector('canvas').getContext('2d');
+      sc.fillStyle = '#f0e2b8';
+      sc.fillRect(9, 8, 14, 16);
+      sc.fillStyle = '#7a4f2c';
+      sc.fillRect(7, 5, 18, 3);
+      sc.fillRect(7, 24, 18, 3);
+      sc.fillStyle = '#ffb144';
+      sc.fillRect(14, 14, 4, 4);
+      this.invCons.appendChild(scroll);
+    }
+
     // ammo
     this.invAmmo.innerHTML = '';
     for (const key of wkeys) {
