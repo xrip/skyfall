@@ -7,6 +7,9 @@
   "routes": [
     { "pattern": "skyfall.akimus.ru", "custom_domain": true }
   ],
+  "vars": {
+    "TURN_URLS": "turn:62.84.172.208:3478?transport=udp,turn:62.84.172.208:3478?transport=tcp"
+  },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

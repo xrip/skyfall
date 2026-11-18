@@ -13,6 +13,7 @@
 //
 // SDP отправляется один раз (non-trickle): ждём окончания сбора ICE-кандидатов
 // и кладём всё в один пакет. Так сигналингу хватает нескольких запросов.
+// Если прямой путь закрыт, браузер использует TURN из ответа создания/входа в комнату.
 
 const SIG = '/api/rooms';
 const STUN = [
@@ -61,9 +62,9 @@ export function saveTurn(cfg) {
   } catch (e) { /* приватный режим — просто не сохраняем */ }
 }
 
-export function iceServers() {
+export function iceServers(defaultTurn = null) {
   const list = [{ urls: STUN.slice() }];
-  const turn = loadTurn();
+  const turn = loadTurn() || defaultTurn;
   if (turn) list.push(turn);
   return list;
 }
@@ -117,6 +118,7 @@ export class RtcLink {
     this.h = handlers || {};
     this.code = null;
     this.token = null;
+    this.turn = null;
     this.role = null;
     this.seq = 0;
     this.session = 0;
@@ -147,7 +149,7 @@ export class RtcLink {
     const room = await api('POST', SIG + '/' + encodeURIComponent(code) + '/join', {});
     this.apply(room, 'guest');
     this.h.onJoined?.(room.code);
-    this.h.onStatus?.('Комната найдена. Устанавливаем прямое соединение…');
+    this.h.onStatus?.('Комната найдена. Устанавливаем соединение…');
     this.startPoll();
     return room.code;
   }
@@ -155,6 +157,7 @@ export class RtcLink {
   apply(room, role) {
     this.code = room.code;
     this.token = room.token;
+    this.turn = room.turn || null;
     this.role = role;
     this.seq = Number(room.seq) || 0;
     this.session = Number(room.session) || 0;
@@ -213,11 +216,11 @@ export class RtcLink {
     const attempt = this.attempt;
     clearTimeout(this._retry);
     this.closePeer(false);
-    this.h.onStatus?.('Друг найден. Устанавливаем прямое соединение…');
+    this.h.onStatus?.('Друг найден. Устанавливаем соединение…');
 
     let pc;
     try {
-      pc = new RTCPeerConnection({ iceServers: iceServers() });
+      pc = new RTCPeerConnection({ iceServers: iceServers(this.turn) });
     } catch (e) {
       this.h.onError?.('Браузер не поддерживает WebRTC');
       return;
@@ -241,7 +244,7 @@ export class RtcLink {
       if (this.dead || this.open || this.attempt !== attempt) return;
       if (this.session !== this.offerSession) return;
       if (this.attempt >= MAX_ATTEMPTS) {
-        this.h.onError?.('Прямое соединение не установилось. Проверьте сеть или добавьте TURN-сервер.');
+        this.h.onError?.('Соединение не установилось. Проверьте сеть или укажите другой TURN-сервер.');
         return;
       }
       this.negotiate();
@@ -257,7 +260,7 @@ export class RtcLink {
 
     let pc;
     try {
-      pc = new RTCPeerConnection({ iceServers: iceServers() });
+      pc = new RTCPeerConnection({ iceServers: iceServers(this.turn) });
     } catch (e) {
       this.h.onError?.('Браузер не поддерживает WebRTC');
       return;

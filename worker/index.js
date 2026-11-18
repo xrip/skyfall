@@ -6,6 +6,7 @@
 // Игровой трафик через Worker НЕ идёт: после обмена SDP игроки соединяются
 // напрямую по WebRTC. На бесплатном плане это десятки запросов на комнату.
 import { json } from './json.js';
+import { withTurn } from './turn.js';
 
 export { Room } from './room.js';
 
@@ -28,7 +29,7 @@ async function createRoom(env) {
       method: 'POST',
       body: JSON.stringify({ code }),
     });
-    if (res.status === 200) return res;
+    if (res.status === 200) return withTurn(res, env);
   }
   return json({ error: 'Не удалось создать комнату' }, 503);
 }
@@ -41,7 +42,8 @@ async function relay(env, code, action, request, search) {
     init.body = await request.text();
     init.headers = { 'Content-Type': 'application/json' };
   }
-  return roomStub(env, code).fetch(target.toString(), init);
+  const response = await roomStub(env, code).fetch(target.toString(), init);
+  return action === 'join' ? withTurn(response, env) : response;
 }
 
 export default {
