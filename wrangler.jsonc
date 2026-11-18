@@ -5,7 +5,7 @@
   "upload_source_maps": true,
   "workers_dev": true,
   "routes": [
-    { "pattern": "akimus.ru", "custom_domain": true }
+    { "pattern": "skyfall.akimus.ru", "custom_domain": true }
   ],
   "assets": {
     "directory": "./public",
