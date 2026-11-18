@@ -3,6 +3,10 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-11-17",
   "upload_source_maps": true,
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "akimus.ru", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
