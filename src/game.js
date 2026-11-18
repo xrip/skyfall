@@ -605,6 +605,7 @@ export class Game {
   }
 
   beginRun() {
+    if (this.dungeonActive) this.exitDungeon(true);
     this.sound.init();
     this.sound.resume();
     this.sound.startAmbient();
@@ -677,6 +678,11 @@ export class Game {
     this.bossMob = null;
     this._bossKey = null;
     this.waveTitle = '';
+    this.dungeonActive = false;
+    this.dungeonBoss = null;
+    this.dungeonPortal = null;
+    this.dungeonPortalMesh = null;
+    this.islandSave = null;
     this.ended = false;
     this.dying = false;
     this.respawnTimer = 0;
@@ -691,7 +697,7 @@ export class Game {
     this.player.reset();
     if (this.runMode === 'sandbox') this.player.grantSandbox();
     this.spawnPlayer();
-    this.player.lastDamage = -99;
+    this.updateScrollHint();
     this.ui.updateChests(CHEST_COUNT, 0);
     this.ui.updateHealth(this.player);
     this.ui.updateHotbar(this.player);
@@ -857,6 +863,7 @@ export class Game {
 
   endRun(victory) {
     if (this.state === 'menu') return;
+    if (this.dungeonActive) this.exitDungeon(true);
     this.resetInventoryUi();
     if (this.netRole === 'host' && this.peerJoined) {
       this.net.send({ t: victory ? 'victory' : 'defeat' });
@@ -925,6 +932,7 @@ export class Game {
   }
 
   toMenu() {
+    if (this.dungeonActive) this.exitDungeon(true);
     this.resetInventoryUi();
     if (this.netRole) {
       this.net.close();
@@ -1364,6 +1372,7 @@ export class Game {
       ],
       state: this.state,
       alien: this.alien ? [+this.alien.pos.x.toFixed(2), +this.alien.pos.y.toFixed(2), +this.alien.pos.z.toFixed(2)] : null,
+      dungeon: this.dungeonActive ? this.dungeonSeed : null,
     });
     if (this.remote.ready) {
       this.avatar.setState(this.remote.pos.x, this.remote.pos.y, this.remote.pos.z, this.remote.yaw, this.remote.alive);
@@ -1444,6 +1453,7 @@ export class Game {
     this.lastSnap = null;
     this.input.keys = {};
     this.input.jumpPressed = false;
+    if (msg.dungeon != null) this.enterDungeon(msg.dungeon, true);
     this.requestLock();
   }
 
@@ -1464,6 +1474,7 @@ export class Game {
     this.mobs.push(mob);
     if (mob.cfg.boss) {
       this.bossMob = mob;
+      if (this.dungeonActive) this.dungeonBoss = mob;
       this.ui.showBoss(mob.cfg.name, Math.max(0, mob.hp / mob.maxHp));
     }
     return mob;
@@ -1748,6 +1759,15 @@ export class Game {
     } else if (msg.kind === 'boss') {
       this.sound.bossRoar();
       this.ui.banner('УГРОЗА', msg.name || 'БОСС', msg.sub || 'Земля дрожит. Не стойте на месте.', true, 4200);
+    } else if (msg.kind === 'dungeon' && msg.seed != null) {
+      this.enterDungeon(msg.seed, true);
+    } else if (msg.kind === 'dungeonClear') {
+      this.spawnDungeonReward();
+      this.ui.banner('ЛОГОВО ЗАЧИЩЕНО', 'ПОРТАЛ ОТКРЫТ', 'Заберите награду и уходите', false, 4400);
+    } else if (msg.kind === 'dungeonExit') {
+      this.exitDungeon(true);
+    } else if (msg.kind === 'dungeonExitReq') {
+      if (this.netRole === 'host') this.exitDungeon();
     } else if (msg.kind === 'slam') {
       this.sound.bossRoar();
       this.effects.ring(msg.x, msg.y + 0.1, msg.z, 0xff5a3d, 11, 0.8);
@@ -2259,6 +2279,17 @@ export class Game {
 
   onPlayerDeath() {
     if (this.state !== 'playing') return;
+    if (this.dungeonActive && this.world?.dungeon) {
+      const s = this.world.dungeon.start;
+      this.player.alive = true;
+      this.player.pos.set(s.x, s.y, s.z);
+      this.player.hp = this.player.maxHp;
+      this.player.vel.set(0, 0, 0);
+      this.player.invuln = 3;
+      this.ui.feed('<b>ПОДЗЕМЕЛЬЕ</b> · возврат ко входу');
+      this.updateHealth();
+      return;
+    }
     if (this.runMode === 'sandbox') {
       this.player.alive = true;
       this.spawnPlayer();
@@ -2298,6 +2329,10 @@ export class Game {
       this.ui.hideBoss();
       this.ui.banner(mob.cfg.name, 'БОСС ПОВЕРЖЕН', 'Добивайте оставшихся', false, 3200);
       this.sound.waveClear();
+    }
+    if (mob === this.dungeonBoss) {
+      this.dungeonBoss = null;
+      this.completeDungeon();
     }
     if (!voided) {
       const value = Math.max(1, Math.round(((COIN_VALUE[mob.type] || 2) + Math.floor(Math.random() * 3)) * (this.difficultyCfg?.coins || 1)));
@@ -2406,6 +2441,10 @@ export class Game {
     } else if (pickup.kind === 'medkit') {
       this.player.addMedkits(pickup.amount);
       this.ui.feed(`<b>+${pickup.amount} аптечка</b>`);
+    } else if (pickup.kind === 'scroll') {
+      this.player.bossScrolls = (this.player.bossScrolls || 0) + 1;
+      this.ui.feed('<b>СВИТОК ПЕРЕМЕЩЕНИЯ</b> · клавиша T — в логово босса');
+      this.updateScrollHint();
     } else {
       const map = { stone: B.STONE, planks: B.PLANKS, metal: B.METAL, obsidian: B.OBSIDIAN };
       const id = map[pickup.kind] || B.STONE;
@@ -2421,6 +2460,7 @@ export class Game {
   /* ================= chests ================= */
   lootChest(chest) {
     if (!chest || chest.data.looted) return;
+    if (chest.data.reward) { this.lootDungeonChest(chest); return; }
     chest.open();
     this.chestsLooted++;
     const tier = chest.tier;
@@ -2502,6 +2542,15 @@ export class Game {
     }
 
     for (const line of lines) this.ui.feed(line);
+
+    // 2% — свиток перемещения в логово босса
+    if (Math.random() < 0.02) {
+      const sp = new THREE.Vector3(chest.data.x + 0.5, chest.data.y + 1.2, chest.data.z + 0.5);
+      this.spawnPickup(sp, 'scroll', 1);
+      this.ui.feed('<b>СВИТОК ПЕРЕМЕЩЕНИЯ</b> · клавиша T — в логово босса');
+      this.updateScrollHint();
+    }
+
     this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
     this.updateHotbar();
     this.updateAmmo();
@@ -2519,7 +2568,358 @@ export class Game {
     }
   }
 
+  /* ================= подземелье босса ================= */
+  updateScrollHint() {
+    const chip = $('scroll-chip');
+    if (!chip) return;
+    const n = this.player.bossScrolls || 0;
+    if (n > 0 && !this.dungeonActive) {
+      chip.innerHTML = `СВИТОК ПЕРЕМЕЩЕНИЯ ×${n} · <b>T</b>`;
+      chip.classList.remove('hidden');
+    } else {
+      chip.classList.add('hidden');
+    }
+  }
+
+  useBossScroll() {
+    if (this.dungeonActive) return;
+    if (!this.player.alive) return;
+    if (!(this.player.bossScrolls > 0)) {
+      this.ui.feed('Нет свитка перемещения', true);
+      return;
+    }
+    this.player.bossScrolls--;
+    this.updateScrollHint();
+    this.enterDungeon();
+  }
+
+  pickDungeonBoss(seed) {
+    let h = ((seed >>> 0) ^ 0x27d4eb2f) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+    return BOSS_ORDER[((h ^ (h >>> 16)) >>> 0) % BOSS_ORDER.length];
+  }
+
+  dungeonTheme(base) {
+    return {
+      ...(base || {}),
+      top: 0x0d070b, mid: 0x160b11, low: 0x241118, fog: 0x120a0e,
+      light: 0xff9a6a, lightIntensity: 0.95,
+      hemiSky: 0x5a3d4a, hemiGround: 0x140c10, hemiIntensity: 0.9,
+      sun: false, moon: false, stars: false, meteors: false,
+      cloud: 0x1a0e14, cloudEmissive: 0x0d070b, cloudOpacity: 0.2,
+      zoneVolcano: 0x7a5a4a, zoneRad: 0x5a7a4a,
+    };
+  }
+
+  setIslandVisible(v) {
+    const toggle = (o) => { if (o && o.group) o.group.visible = v; };
+    for (const m of this.mobs) toggle(m);
+    for (const c of this.chests) toggle(c);
+    for (const p of this.pickups) toggle(p);
+    for (const p of this.projectiles) if (p.mesh) p.mesh.visible = v;
+    toggle(this.merchant);
+    toggle(this.alien);
+    for (const b of this.benches) toggle(b);
+    toggle(this.avatar);
+  }
+
+  enterDungeon(seed = null, fromNet = false) {
+    if (this.dungeonActive || !this.world) return;
+    const runSeed = seed == null ? ((Math.random() * 1e9) | 0) : seed;
+    this.dungeonSeed = runSeed;
+    this.dungeonBossKey = this.pickDungeonBoss(runSeed);
+
+    this.islandSave = {
+      world: this.world,
+      theme: this.theme,
+      palette: this.palette,
+      pos: this.player.pos.clone(),
+      yaw: this.player.yaw,
+      pitch: this.player.pitch,
+      mobs: this.mobs,
+      chests: this.chests,
+      pickups: this.pickups,
+      projectiles: this.projectiles,
+      bossMob: this.bossMob,
+      phase: this.phase,
+      waveIndex: this.waveIndex,
+      phaseTime: this.phaseTime,
+      spawnQueue: this.spawnQueue,
+      spawnIndex: this.spawnIndex,
+      waveElapsed: this.waveElapsed,
+      waveActive: this.waveActive,
+      guestRemaining: this.guestRemaining,
+      lootTimer: this.lootTimer,
+    };
+    const save = this.islandSave;
+    if (this.world) this.world.group.visible = false;
+    this.setIslandVisible(false);
+
+    this.mobs = [];
+    this.chests = [];
+    this.pickups = [];
+    this.projectiles = [];
+    this.bossMob = null;
+    this.dungeonBoss = null;
+    this.dungeonPortal = null;
+    this.dungeonPortalMesh = null;
+    this.effects.clear();
+
+    const world = new World(runSeed);
+    world.generateDungeon(runSeed, this.atlas);
+    world.initRenderer(this.scene);
+    world.group.visible = true;
+    this.world = world;
+    this.dungeonActive = true;
+    if (this.effects) this.effects.world = world;
+    this.createWorldLights();
+    this.applyAtmosphere(this.dungeonTheme(save.theme), world.palette);
+
+    const d = world.dungeon;
+    this.player.pos.set(d.start.x, d.start.y, d.start.z);
+    this.player.vel.set(0, 0, 0);
+    this.player.invuln = 2;
+    this.dungeonExitMesh = null;
+    this.dungeonExitPad = null;
+    this.spawnExitPad(new THREE.Vector3(d.start.x, d.start.y, d.start.z - 2.6));
+    this.ui.setHudVisible(true);
+    this.ui.hideBoss();
+    this.ui.setPrompt(null);
+    this.ui.setZone('ПОДЗЕМЕЛЬЕ', 'логово босса', 'volcano');
+    this.ui.updateCompass('');
+    $('minimap-wrap').classList.add('hidden');
+    $('chest-counter').classList.add('hidden');
+    this.updateScrollHint();
+
+    if (!fromNet && this.netRole === 'host' && this.peerJoined) {
+      this.net.send({ t: 'event', kind: 'dungeon', seed: runSeed });
+    }
+    if (this.netRole !== 'guest') {
+      const mins = MOBS[this.dungeonBossKey].minions;
+      for (let i = 0; i < d.spawns.length; i++) {
+        const p = d.spawns[i];
+        this.spawnMob(mins[i % 2], { x: p.x, y: p.y, z: p.z });
+      }
+    }
+    this.ui.banner('ПОДЗЕМЕЛЬЕ', MOBS[this.dungeonBossKey].title, 'Прихвостни на пути. Найдите логово.', true, 4400);
+    this.sound.bossRoar();
+    this.updateHealth();
+  }
+
+  exitDungeon(fromNet = false) {
+    if (!this.dungeonActive) return;
+    if (!fromNet && this.netRole === 'guest') {
+      this.net.send({ t: 'event', kind: 'dungeonExitReq' });
+      return;
+    }
+    const save = this.islandSave;
+    if (!save) return;
+
+    for (const m of this.mobs.slice()) m.dispose();
+    this.mobs.length = 0;
+    for (const p of this.pickups.slice()) p.dispose();
+    this.pickups.length = 0;
+    for (const c of this.chests.slice()) c.dispose();
+    this.chests.length = 0;
+    this.projectiles.length = 0;
+    if (this.dungeonPortalMesh) {
+      this.scene.remove(this.dungeonPortalMesh);
+      this.dungeonPortalMesh = null;
+    }
+    if (this.dungeonExitMesh) {
+      this.scene.remove(this.dungeonExitMesh);
+      this.dungeonExitMesh = null;
+    }
+    this.dungeonExitPad = null;
+    this.effects.clear();
+
+    this.world.group.visible = false;
+    this.world.dispose();
+    this.world = save.world;
+    this.world.group.visible = true;
+    this.mobs = save.mobs;
+    this.chests = save.chests;
+    this.pickups = save.pickups;
+    this.projectiles = save.projectiles;
+    this.bossMob = save.bossMob;
+    this.phase = save.phase;
+    this.waveIndex = save.waveIndex;
+    this.phaseTime = save.phaseTime;
+    this.spawnQueue = save.spawnQueue;
+    this.spawnIndex = save.spawnIndex;
+    this.waveElapsed = save.waveElapsed;
+    this.waveActive = save.waveActive;
+    this.guestRemaining = save.guestRemaining;
+    this.lootTimer = save.lootTimer;
+    this.setIslandVisible(true);
+    this.player.pos.copy(save.pos);
+    this.player.yaw = save.yaw;
+    this.player.pitch = save.pitch;
+    this.player.vel.set(0, 0, 0);
+    this.player.invuln = 2.5;
+    this.player.updateCamera(0.016);
+    this.applyAtmosphere(save.theme, save.palette);
+    this.effects.world = this.world;
+    this.createWorldLights();
+    this.dungeonActive = false;
+    this.dungeonBoss = null;
+    this.dungeonPortal = null;
+    this.islandSave = null;
+    this.nearPortal = false;
+    this.ui.hideBoss();
+    if (this.bossMob) this.ui.showBoss(this.bossMob.cfg.name, Math.max(0, this.bossMob.hp / this.bossMob.maxHp));
+    $('minimap-wrap').classList.remove('hidden');
+    $('chest-counter').classList.remove('hidden');
+    this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+    this.updateScrollHint();
+    this.ui.setHazard('');
+    this.ui.banner('ВОЗВРАЩЕНИЕ', 'ОСТРОВ', 'Вы вернулись из логова', false, 2600);
+    if (!fromNet && this.netRole === 'host' && this.peerJoined) {
+      this.net.send({ t: 'event', kind: 'dungeonExit' });
+    }
+  }
+
+  updateDungeon(dt) {
+    const cfg = MOBS[this.dungeonBossKey];
+    if (!this.dungeonBoss && !this.dungeonPortal && this.netRole !== 'guest') {
+      const b = this.world.dungeon.boss;
+      const d = Math.hypot(this.player.pos.x - b.x, this.player.pos.z - b.z);
+      if (d < 15) this.spawnDungeonBoss();
+    }
+    if (this.dungeonPortalMesh) {
+      this.dungeonPortalMesh.rotation.y += dt * 0.9;
+      this.dungeonPortalMesh.position.y = this.dungeonPortalBaseY + Math.sin(this.time * 2) * 0.12;
+    }
+    if (this.dungeonBoss) {
+      this.ui.setWave('ПОДЗЕМЕЛЬЕ', `БОСС: ${cfg.name}`, 'Убейте его', '', true);
+    } else if (this.dungeonPortal) {
+      this.ui.setWave('ПОДЗЕМЕЛЬЕ', 'ПОРТАЛ ОТКРЫТ', 'Заберите награду и уходите', '', false);
+    } else {
+      this.ui.setWave('ПОДЗЕМЕЛЬЕ', `ЛОГОВО: ${cfg.name}`, `Прихвостней: ${this.mobs.length}`, '', true);
+    }
+  }
+
+  spawnDungeonBoss() {
+    if (this.dungeonBoss) return;
+    const b = this.world.dungeon.boss;
+    this.spawnMob(this.dungeonBossKey, { x: b.x, y: b.y, z: b.z });
+    const mob = this.mobs[this.mobs.length - 1];
+    if (!mob || mob.type !== this.dungeonBossKey) return;
+    this.dungeonBoss = mob;
+    this.bossMob = mob;
+  }
+
+  completeDungeon() {
+    if (this.dungeonPortal) return;
+    if (this.netRole === 'guest') return;
+    this.spawnDungeonReward();
+    this.ui.banner('ЛОГОВО ЗАЧИЩЕНО', 'ПОРТАЛ ОТКРЫТ', 'Заберите награду и возвращайтесь', false, 4400);
+    this.sound.waveClear();
+    if (this.netRole === 'host' && this.peerJoined) {
+      this.net.send({ t: 'event', kind: 'dungeonClear' });
+    }
+  }
+
+  spawnDungeonReward() {
+    if (this.dungeonPortal) return;
+    const d = this.world.dungeon;
+    const bossKey = this.dungeonBossKey;
+    const spots = d.chests;
+    this.chests.push(new Chest(this, { tier: 3, x: spots[0].x, y: spots[0].y, z: spots[0].z, looted: false, reward: 'coins' }));
+    this.chests.push(new Chest(this, { tier: 3, x: spots[1].x, y: spots[1].y, z: spots[1].z, looted: false, reward: 'coins' }));
+    this.chests.push(new Chest(this, { tier: 3, x: spots[2].x, y: spots[2].y, z: spots[2].z, looted: false, reward: 'weapon', bossKey }));
+    this.spawnPickup(new THREE.Vector3(d.boss.x, d.boss.y + 0.8, d.boss.z), 'coin', 60);
+    this.dungeonPortal = { pos: new THREE.Vector3(d.portal.x, d.portal.y, d.portal.z) };
+    this.spawnPortalMesh(d.portal);
+  }
+
+  spawnPortalMesh(p) {
+    if (this.dungeonPortalMesh) return;
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.15, 0.13, 8, 28),
+      new THREE.MeshBasicMaterial({ color: 0x8ef0ff, toneMapped: false })
+    );
+    g.add(ring);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.projectileTex, color: 0x8ef0ff, transparent: true, opacity: 0.8,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.setScalar(3.2);
+    g.add(glow);
+    g.position.set(p.x, p.y + 1.4, p.z);
+    this.scene.add(g);
+    this.dungeonPortalMesh = g;
+    this.dungeonPortalBaseY = p.y + 1.4;
+    this.effects.ring(p.x, p.y + 0.1, p.z, 0x8ef0ff, 3.2, 0.9);
+    this.sound.waveHorn();
+  }
+
+  // запасной выход у входа: из подземелья можно уйти в любой момент
+  spawnExitPad(p) {
+    if (this.dungeonExitMesh) return;
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.85, 0.09, 8, 24),
+      new THREE.MeshBasicMaterial({ color: 0x8affd0, toneMapped: false })
+    );
+    g.add(ring);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.projectileTex, color: 0x8affd0, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.setScalar(2.4);
+    g.add(glow);
+    g.position.set(p.x, p.y + 1.2, p.z);
+    this.scene.add(g);
+    this.dungeonExitMesh = g;
+    this.dungeonExitPad = { pos: p.clone() };
+  }
+
+  lootDungeonChest(chest) {
+    if (!chest || chest.data.looted) return;
+    chest.open();
+    const player = this.player;
+    if (chest.data.reward === 'weapon') {
+      const key = MOBS[chest.data.bossKey]?.weapon || 'crusher';
+      const wl = player.giveWeapon(key);
+      const cfg = WEAPONS[key];
+      this.ui.banner('РЕЛИКВИЯ', cfg ? cfg.name : 'ОРУЖИЕ БОССА', 'Только из подземелья', false, 4400);
+      this.ui.feed(`<b>ОРУЖИЕ БОССА:</b> ${wl || key}`);
+      this.sound.waveClear();
+    } else {
+      const coins = 90 + Math.floor(Math.random() * 70);
+      player.addCoins(coins);
+      player.addAmmoAll(0.8);
+      player.addMedkits(2);
+      this.ui.feed(`<b>+${coins} монет</b> · боезапас · 2 аптечки`);
+    }
+    this.ui.updateChests(this.chests.length, this.chests.filter((c) => c.data.looted).length);
+    this.updateHotbar();
+    this.updateAmmo();
+    this.updateHealth();
+    this.effects.spawn(chest.data.x + 0.5, chest.data.y + 0.8, chest.data.z + 0.5, 0xffd27a, 26, {
+      speed: 2.6, up: 4, size: 0.07, life: 1.2, solid: false,
+    });
+  }
+
   updateChestInteraction() {
+    this.nearPortal = false;
+    if (this.dungeonActive) {
+      const pads = [];
+      if (this.dungeonExitPad) pads.push({ p: this.dungeonExitPad.pos, label: 'Вернуться на остров' });
+      if (this.dungeonPortal) pads.push({ p: this.dungeonPortal.pos, label: 'Портал на остров' });
+      for (const pad of pads) {
+        const d = Math.hypot(pad.p.x - this.player.pos.x, pad.p.z - this.player.pos.z);
+        if (d < 3.2 && Math.abs(pad.p.y - this.player.pos.y) < 3.2) {
+          this.nearPortal = true;
+          this.nearChest = null;
+          this.ui.setPrompt(pad.label);
+          return;
+        }
+      }
+    }
     let best = null, bestD = 3.4;
     const fwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.player.yaw);
 
@@ -2586,6 +2986,7 @@ export class Game {
   }
 
   interact() {
+    if (this.nearPortal) { this.exitDungeon(); return; }
     if (this.nearBench) { this.openBench(this.nearBench); return; }
     if (this.nearAlien) { this.openAlienShop(); return; }
     if (this.nearMerchant) { this.openShop(); return; }
@@ -2937,6 +3338,7 @@ export class Game {
   updateHazards(dt) {
     const p = this.player;
     if (!p.alive) { this.ui.setHazard(''); return; }
+    if (this.dungeonActive) { this.ui.setHazard(''); return; }
     const bx = Math.floor(p.pos.x), bz = Math.floor(p.pos.z);
     const zone = this.world.zoneAt(bx, bz);
     this.currentZone = zone;
@@ -3344,6 +3746,7 @@ export class Game {
     }
     if (e.code === 'KeyR' && this.player.isWeaponSlot) { this.player.startReload(); return; }
     if (e.code === 'KeyE') { this.interact(); return; }
+    if (e.code === 'KeyT') { this.useBossScroll(); return; }
     if (e.code === 'KeyQ') { this.player.cycleWeapon(); return; }
     if (e.code === 'Enter' && this.phase === 'prep' && this.phaseTime > 2) {
       this.phaseTime = 1.2;
@@ -3385,7 +3788,7 @@ export class Game {
       this.runTime += dt;
       this.player.update(dt, this.input);
       this.updateHazards(dt);
-      this.checkAirshipRaid();
+      if (!this.dungeonActive) this.checkAirshipRaid();
       for (let i = this.mobs.length - 1; i >= 0; i--) {
         const m = this.mobs[i];
         if (!m.dead) {
@@ -3404,23 +3807,27 @@ export class Game {
       for (const c of this.chests) c.update(dt);
       this.world.rebuildDirty(3);
       this.effects.update(dt);
-      if (this.netRole !== 'guest') this.updateWaves(dt);
+      if (this.dungeonActive) {
+        this.updateDungeon(dt);
+      } else if (this.netRole !== 'guest') this.updateWaves(dt);
       else {
         this.phaseTime = Math.max(0, this.phaseTime - dt);
         this.updateGuestHud();
       }
-      this.updateLootRefresh(dt);
+      if (!this.dungeonActive) this.updateLootRefresh(dt);
       this.updateChestInteraction();
       this.updateBossUI();
       this.updateWorldLights(dt);
       this.updateSky(dt);
       this.updateHealth();
       this.ui.setMineProgress(this.player.mining ? this.player.mineProg : 0);
-      this.ui.updateMinimap(this.player, dt);
-      this.compassTimer -= dt;
-      if (this.compassTimer <= 0) {
-        this.compassTimer = 0.22;
-        this.updateCompass();
+      if (!this.dungeonActive) {
+        this.ui.updateMinimap(this.player, dt);
+        this.compassTimer -= dt;
+        if (this.compassTimer <= 0) {
+          this.compassTimer = 0.22;
+          this.updateCompass();
+        }
       }
       this.updateNet(dt);
       const w = window.innerWidth, h = window.innerHeight;

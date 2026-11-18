@@ -380,6 +380,56 @@ export const WEAPONS = {
     color: 0x2a4a4a, accent: 0x8affd0,
   },
 
+  /* ---- boss relics: only from the dungeon reward chests ---- */
+  crusher: {
+    name: 'КАМНЕДРОБ', type: 'ДРОБОВИК КОЛОССА', key: 'crusher', bossOnly: true,
+    dmg: 21, rpm: 70, mag: 8, reserveMax: 64, spread: 0.062, pellets: 13,
+    auto: false, reload: 2.4, range: 52, kick: 0.1, rank: 6,
+    color: 0x6d7264, accent: 0xffd27a,
+  },
+  harvest: {
+    name: 'ЖАТВА', type: 'ВИНТОВКА ЖНЕЦА', key: 'harvest', bossOnly: true,
+    dmg: 165, rpm: 50, mag: 5, reserveMax: 40, spread: 0.0012, pellets: 1,
+    auto: false, reload: 2.5, range: 300, kick: 0.1, rank: 6, zoom: 3.2,
+    color: 0x2e2839, accent: 0x9dffc4,
+  },
+  swarm: {
+    name: 'РОЙ', type: 'ПП МАТКИ', key: 'swarm', bossOnly: true,
+    dmg: 13, rpm: 1100, mag: 60, reserveMax: 480, spread: 0.022, pellets: 1,
+    auto: true, reload: 2.0, range: 95, kick: 0.012, rank: 6,
+    color: 0x8a7a2e, accent: 0xffe14a,
+  },
+  magmator: {
+    name: 'МАГМОМЁТ', type: 'ОРУЖИЕ ПЛАВНЯ', key: 'magmator', bossOnly: true,
+    dmg: 9, rpm: 900, mag: 200, reserveMax: 800, spread: 0.05, pellets: 1,
+    auto: true, reload: 3.6, range: 60, kick: 0.006, rank: 6,
+    color: 0x4a2420, accent: 0xff7a2a,
+  },
+  prism: {
+    name: 'ПРИЗМА', type: 'КРИСТАЛЬНЫЙ ЛУЧ', key: 'prism', bossOnly: true,
+    dmg: 62, rpm: 240, mag: 30, reserveMax: 180, spread: 0.004, pellets: 1,
+    auto: true, reload: 1.8, range: 220, kick: 0.024, rank: 6, zoom: 1.7,
+    color: 0x2f5a6b, accent: 0xa8f6ff,
+  },
+  staff: {
+    name: 'ЖЕЗЛ ПАСТУХА', type: 'ЛУЧЕВИК', key: 'staff', bossOnly: true,
+    dmg: 84, rpm: 170, mag: 24, reserveMax: 144, spread: 0.006, pellets: 1,
+    auto: true, reload: 2.1, range: 240, kick: 0.03, rank: 6, zoom: 1.4,
+    color: 0x4d6b4a, accent: 0xc6ff6a,
+  },
+  stormgun: {
+    name: 'ГРОМООТВОД', type: 'РЕЛЬСОВОЕ ОРУЖИЕ', key: 'stormgun', bossOnly: true,
+    dmg: 210, rpm: 42, mag: 4, reserveMax: 28, spread: 0.001, pellets: 1,
+    auto: false, reload: 3.0, range: 320, kick: 0.12, rank: 6, zoom: 3.4,
+    color: 0x2f4a6b, accent: 0x9fe0ff,
+  },
+  sandstorm: {
+    name: 'ПЕСЧАНАЯ БУРЯ', type: 'ПУЛЕМЁТ ЧЕРВЯ', key: 'sandstorm', bossOnly: true,
+    dmg: 16, rpm: 1200, mag: 240, reserveMax: 960, spread: 0.032, pellets: 1,
+    auto: true, reload: 4.0, range: 100, kick: 0.007, rank: 6,
+    color: 0x8a7040, accent: 0xffb144,
+  },
+
   /* ---- melee: no ammo, hold LMB to swing ---- */
   knife: {
     name: 'ОСКАЛ', type: 'НОЖ', key: 'knife',
@@ -582,7 +632,7 @@ const BOSSES = {
     hp: 1400, speed: 2.0, dmg: 42, range: 3.9, attackCd: 1.75,
     radius: 1.3, height: 4.0, score: 3200, boss: true, shape: 'brute',
     body: 0x6d7264, head: 0x8b907f, accent: 0x393d34, eye: 0xffd27a,
-    horns: true, spikes: true, minions: ['guard', 'shard'],
+    horns: true, spikes: true, minions: ['guard', 'shard'], weapon: 'crusher',
     addsCount: 3, slamDamage: 36, slamRadius: 10.5,
   },
   reaper: {
@@ -591,7 +641,7 @@ const BOSSES = {
     hp: 1050, speed: 2.6, dmg: 38, range: 3.4, attackCd: 1.35,
     radius: 1.0, height: 3.3, score: 3200, boss: true, shape: 'wraith',
     body: 0x2e2839, head: 0x413a52, accent: 0x14111c, eye: 0x9dffc4,
-    minions: ['ghoul', 'wisp'], addsCount: 4, slamDamage: 28, slamRadius: 9.5,
+    minions: ['ghoul', 'wisp'], weapon: 'harvest', addsCount: 4, slamDamage: 28, slamRadius: 9.5,
   },
   hive: {
     name: 'МАТКА', title: 'КОРОЛЕВА УЛЬЯ',
@@ -599,7 +649,7 @@ const BOSSES = {
     hp: 1200, speed: 2.35, dmg: 34, range: 3.2, attackCd: 1.25,
     radius: 1.15, height: 3.0, score: 3400, boss: true, shape: 'beast',
     body: 0x8a7a2e, head: 0x4a3f1c, accent: 0x1d1a0e, eye: 0xffe14a,
-    spikes: true, minions: ['larva', 'stinger'], addsCount: 5, slamDamage: 26, slamRadius: 9,
+    spikes: true, minions: ['larva', 'stinger'], weapon: 'swarm', addsCount: 5, slamDamage: 26, slamRadius: 9,
   },
   magma: {
     name: 'ПЛАВЕНЬ', title: 'МАГМОВЫЙ ТИТАН',
@@ -607,7 +657,7 @@ const BOSSES = {
     hp: 1500, speed: 1.95, dmg: 46, range: 4.0, attackCd: 1.8,
     radius: 1.3, height: 3.9, score: 3400, boss: true, shape: 'brute',
     body: 0x4a2420, head: 0x6b2f24, accent: 0x1c0d0c, eye: 0xff7a2a,
-    spikes: true, minions: ['hound', 'ember'], addsCount: 3, slamDamage: 40, slamRadius: 10.5,
+    spikes: true, minions: ['hound', 'ember'], weapon: 'magmator', addsCount: 3, slamDamage: 40, slamRadius: 10.5,
   },
   warden: {
     name: 'ХРАНИТЕЛЬ', title: 'КРИСТАЛЬНЫЙ СТРАЖ',
@@ -617,7 +667,7 @@ const BOSSES = {
     flying: true, hoverHeight: 2.6, keepRange: 11, minRange: 5.5,
     caster: true, castRange: 24, castCd: 1.9, projSpeed: 24, projDmg: 22, projColor: 0x9fe8ff,
     body: 0x2f5a6b, head: 0x5fd8e8, accent: 0x1b3440, eye: 0xa8f6ff,
-    minions: ['sentinel', 'beam'], addsCount: 3, slamDamage: 24, slamRadius: 9,
+    minions: ['sentinel', 'beam'], weapon: 'prism', addsCount: 3, slamDamage: 24, slamRadius: 9,
   },
   shepherd: {
     name: 'ПАСТУХ', title: 'СЕРЫЙ ПРИШЕЛЕЦ',
@@ -625,7 +675,7 @@ const BOSSES = {
     hp: 1100, speed: 2.5, dmg: 36, range: 3.2, attackCd: 1.4,
     radius: 1.0, height: 3.6, score: 3600, boss: true, shape: 'humanoid',
     body: 0x4d6b4a, head: 0x8fc98a, accent: 0x22331f, eye: 0xc6ff6a,
-    crown: true, minions: ['prober', 'abductor'], addsCount: 3, slamDamage: 26, slamRadius: 9.5,
+    crown: true, minions: ['prober', 'abductor'], weapon: 'staff', addsCount: 3, slamDamage: 26, slamRadius: 9.5,
   },
   storm: {
     name: 'БУРЯ', title: 'ГРОЗОВОЙ КОЛОСС',
@@ -634,7 +684,7 @@ const BOSSES = {
     radius: 1.2, height: 3.8, score: 3600, boss: true, shape: 'brute',
     body: 0x2f4a6b, head: 0x5a8ac9, accent: 0x1a2a40, eye: 0x9fe0ff,
     horns: true, caster: true, castRange: 20, castCd: 2.4, projSpeed: 26, projDmg: 24, projColor: 0x9fe0ff,
-    minions: ['thunder', 'ball'], addsCount: 3, slamDamage: 30, slamRadius: 10,
+    minions: ['thunder', 'ball'], weapon: 'stormgun', addsCount: 3, slamDamage: 30, slamRadius: 10,
   },
   worm: {
     name: 'ЧЕРВЬ', title: 'ПЕСЧАНЫЙ ЧЕРВЬ',
@@ -642,7 +692,7 @@ const BOSSES = {
     hp: 1600, speed: 1.9, dmg: 44, range: 4.2, attackCd: 1.9,
     radius: 1.35, height: 4.2, score: 3800, boss: true, shape: 'worm',
     body: 0x8a7040, head: 0x6b5430, accent: 0x3a2c18, eye: 0xffb144,
-    spikes: true, minions: ['mite', 'spitter'], addsCount: 3, slamDamage: 38, slamRadius: 11,
+    spikes: true, minions: ['mite', 'spitter'], weapon: 'sandstorm', addsCount: 3, slamDamage: 38, slamRadius: 11,
   },
 };
 

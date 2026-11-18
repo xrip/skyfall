@@ -279,6 +279,18 @@ export class ViewModel {
       vbox(g, 0.07, 0.17, 0.09, 0, -0.14, 0.12, grip, { rot: [-0.18, 0, 0] });
       vbox(g, 0.1, 0.02, 0.18, 0, 0.1, -0.42, accent);
       this.muzzle.position.set(0, 0.06, -0.54);
+    } else if (cfg.bossOnly) {
+      // реликвия босса: тяжёлый корпус и светящийся сердечник
+      vbox(g, 0.1, 0.12, 0.5, 0, 0.01, -0.14, mid);
+      vbox(g, 0.14, 0.09, 0.22, 0, 0.08, 0.02, dark);
+      vbox(g, 0.075, 0.075, 0.34, 0, 0.02, -0.48, dark);
+      vbox(g, 0.05, 0.05, 0.18, 0, 0.02, -0.68, accent, { emissive: accent });
+      vbox(g, 0.16, 0.16, 0.16, 0, 0.03, -0.1, 0x1b2028);
+      vbox(g, 0.1, 0.1, 0.1, 0, 0.03, -0.1, accent, { emissive: accent });
+      vbox(g, 0.05, 0.2, 0.12, 0, -0.13, 0.06, grip, { rot: [-0.2, 0, 0] });
+      vbox(g, 0.08, 0.08, 0.16, 0, 0.09, 0.2, 0x2c3540);
+      vbox(g, 0.02, 0.03, 0.22, -0.06, 0.06, -0.2, accent);
+      this.muzzle.position.set(0, 0.02, -0.78);
     }
     // gloved hand on the grip
     vbox(g, 0.105, 0.1, 0.115, 0.005, -0.19, 0.055, 0x343b45);
@@ -636,6 +648,7 @@ export class Player {
     this.infiniteBlocks = true;
     for (const key of Object.keys(WEAPONS)) {
       const cfg = WEAPONS[key];
+      if (cfg.bossOnly) continue;
       this.owned[key] = true;
       if (!cfg.melee) {
         this.mag[key] = cfg.mag;
@@ -699,6 +712,7 @@ export class Player {
     this.sandbox = false;
     this.infiniteAmmo = false;
     this.infiniteBlocks = false;
+    this.bossScrolls = 0;
     this.armorOwned = {};
     this.armorEquip = { helmet: null, chest: null, legs: null };
     this.armorReduction = 0;

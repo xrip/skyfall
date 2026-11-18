@@ -1569,6 +1569,22 @@ export class Pickup {
       const m3 = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: 0xff5468 }));
       m3.scale.set(0.08, 0.24, 0.26);
       g.add(m1, m2, m3);
+    } else if (kind === 'scroll') {
+      const paper = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: 0xf0e2b8 }));
+      paper.scale.set(0.26, 0.32, 0.05);
+      paper.rotation.z = 0.2;
+      const rod = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: 0x7a4f2c }));
+      rod.scale.set(0.32, 0.05, 0.07);
+      rod.position.y = 0.17;
+      const seal = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: 0xffb144, toneMapped: false }));
+      seal.scale.set(0.08, 0.08, 0.06);
+      seal.position.set(0, -0.02, 0.05);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: game.projectileTex, color: 0xffb144, transparent: true, opacity: 0.8,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      glow.scale.setScalar(1.0);
+      g.add(paper, rod, seal, glow);
     } else if (kind === 'ammo') {
       const m1 = new THREE.Mesh(BOX, new THREE.MeshLambertMaterial({ color: 0x9aa6b4 }));
       m1.scale.set(0.36, 0.22, 0.26);

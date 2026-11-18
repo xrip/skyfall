@@ -62,6 +62,17 @@ function drawWeaponIcon(ctx, key) {
     ctx.fillStyle = '#d8ffe8'; ctx.fillRect(2, -5, 3, 3);
     ctx.fillStyle = '#39424e'; ctx.fillRect(7, 3, 8, 6);
     ctx.fillStyle = accent; ctx.fillRect(9, -3, 10, 2);
+  } else if (c.bossOnly) {
+    ctx.fillStyle = body;
+    ctx.fillRect(-18, -4, 32, 8);
+    ctx.fillStyle = '#1b2028';
+    ctx.fillRect(-6, 4, 8, 11);
+    ctx.fillRect(10, 2, 8, 4);
+    ctx.fillStyle = accent;
+    ctx.fillRect(-2, -9, 10, 10);
+    ctx.fillRect(14, -2, 8, 3);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(1, -6, 3, 3);
   } else if (key === 'knife') {
     ctx.fillStyle = '#c7d2de';
     ctx.beginPath(); ctx.moveTo(-13, 2); ctx.lineTo(11, -4); ctx.lineTo(12, 1); ctx.lineTo(-13, 5); ctx.closePath(); ctx.fill();

@@ -1295,6 +1295,157 @@ export class World {
   }
 
   /* ---------------- meshing ---------------- */
+  // Отдельный мир-подземелье: лабиринт из коридоров, зал босса и награда.
+  generateDungeon(seed, atlas) {
+    this.seed = seed;
+    this.atlas = atlas;
+    this.palette = WORLD_PALETTES[0];
+    this.skyTheme = SKY_THEMES[0];
+    this.dungeon = null;
+
+    // детерминированный ГПСЧ: у хоста и гостя должен быть один лабиринт
+    let rndState = ((seed >>> 0) ^ 0x9e3779b9) >>> 0 || 1;
+    const rnd = () => {
+      rndState = (Math.imul(rndState, 1664525) + 1013904223) >>> 0;
+      return rndState / 4294967296;
+    };
+
+    const cells = 13;
+    const cell = 5;
+    const floorY = 30;
+    const cx0 = ISLAND_CENTER.x - Math.floor((cells * cell) / 2);
+    const cz0 = ISLAND_CENTER.z - Math.floor((cells * cell) / 2);
+
+    const floorSet = new Set();
+    const carve = (x, z) => {
+      if (x < 2 || z < 2 || x >= SX - 2 || z >= SZ - 2) return;
+      for (let y = floorY; y < floorY + 3; y++) this.setRaw(x, y, z, 0);
+      this.setRaw(x, floorY - 1, z, B.BRICK);
+      this.setRaw(x, floorY + 3, z, B.BRICK);
+      this.heights[x + z * SX] = floorY - 1;
+      floorSet.add(x + z * SX);
+    };
+    const carveRect = (x1, z1, x2, z2) => {
+      for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) carve(x, z);
+    };
+
+    // сплошной камень, из которого вырезаем лабиринт
+    const pad = 4;
+    for (let x = cx0 - pad; x <= cx0 + cells * cell + pad; x++) {
+      for (let z = cz0 - pad; z <= cz0 + cells * cell + pad; z++) {
+        for (let y = floorY - 1; y <= floorY + 3; y++) {
+          this.setRaw(x, y, z, y === floorY + 3 ? B.BRICK : B.STONE);
+        }
+      }
+    }
+
+    const centerOf = (i, j) => [cx0 + i * cell + 2, cz0 + j * cell + 2];
+    const link = (i, j, ni, nj) => {
+      const [ax, az] = centerOf(i, j);
+      const [bx, bz] = centerOf(ni, nj);
+      if (az === bz) {
+        const x1 = Math.min(ax, bx) - 1, x2 = Math.max(ax, bx) + 1;
+        carveRect(x1, az - 1, x2, az + 1);
+      } else {
+        const z1 = Math.min(az, bz) - 1, z2 = Math.max(az, bz) + 1;
+        carveRect(ax - 1, z1, ax + 1, z2);
+      }
+    };
+
+    // DFS-лабиринт
+    const seen = new Uint8Array(cells * cells);
+    const stack = [[0, 0]];
+    seen[0] = 1;
+    {
+      const [sx, sz] = centerOf(0, 0);
+      carveRect(sx - 1, sz - 1, sx + 1, sz + 1);
+    }
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (stack.length) {
+      const cur = stack[stack.length - 1];
+      const i = cur[0], j = cur[1];
+      let moved = false;
+      const order = dirs.slice();
+      for (let k = order.length - 1; k > 0; k--) {
+        const r = Math.floor(rnd() * (k + 1));
+        const tmp = order[k]; order[k] = order[r]; order[r] = tmp;
+      }
+      for (const d of order) {
+        const ni = i + d[0], nj = j + d[1];
+        if (ni < 0 || ni >= cells || nj < 0 || nj >= cells) continue;
+        if (seen[ni + nj * cells]) continue;
+        link(i, j, ni, nj);
+        seen[ni + nj * cells] = 1;
+        stack.push([ni, nj]);
+        moved = true;
+        break;
+      }
+      if (!moved) stack.pop();
+    }
+    // петли: убираем часть стен, чтобы лабиринт путал, но не был тупиковым
+    for (let k = 0; k < 14; k++) {
+      const i = Math.floor(rnd() * (cells - 1));
+      const j = Math.floor(rnd() * cells);
+      if (rnd() < 0.5) link(i, j, i + 1, j);
+      else link(i, j, i, Math.min(cells - 1, j + 1));
+    }
+
+    // стартовая комната
+    const [sx, sz] = centerOf(0, 0);
+    carveRect(sx - 3, sz - 3, sx + 3, sz + 3);
+    // зал босса в дальнем углу
+    const [ex, ez] = centerOf(cells - 1, cells - 1);
+    const bx = ex - 3, bz = ez - 3;
+    carveRect(bx - 6, bz - 6, bx + 6, bz + 6);
+    // дорожка от лабиринта в зал
+    carveRect(bx - 1, bz + 6, bx + 1, ez + 6);
+    carveRect(ex - 6, ez - 6, ex - 6, ez + 6);
+
+    // факелы
+    const floors = Array.from(floorSet);
+    const pick = (list, n) => {
+      const out = [];
+      for (let k = 0; k < n && list.length; k++) {
+        out.push(list.splice(Math.floor(rnd() * list.length), 1)[0]);
+      }
+      return out;
+    };
+    this.lights.push({ x: sx + 0.5, y: floorY + 2, z: sz + 0.5, color: 0xffc070, intensity: 2.4 });
+    for (const key of pick(floors.slice(), 6)) {
+      const x = key % SX;
+      const z = Math.floor(key / SX);
+      this.lights.push({ x: x + 0.5, y: floorY + 2, z: z + 0.5, color: 0xffa050, intensity: 1.8 });
+    }
+    this.lights.push({ x: bx + 0.5, y: floorY + 2, z: bz + 0.5, color: 0x8ef0ff, intensity: 2.2 });
+
+    // точки для прихвостней: подальше от входа и не в зале босса
+    const spawns = [];
+    for (const key of floors) {
+      const x = key % SX;
+      const z = Math.floor(key / SX);
+      if (Math.hypot(x - sx, z - sz) < 12) continue;
+      if (Math.hypot(x - bx, z - bz) < 9) continue;
+      spawns.push({ x: x + 0.5, y: floorY + 0.1, z: z + 0.5 });
+    }
+    for (let k = spawns.length - 1; k > 0; k--) {
+      const r = Math.floor(rnd() * (k + 1));
+      const tmp = spawns[k]; spawns[k] = spawns[r]; spawns[r] = tmp;
+    }
+
+    this.spawnPoints = spawns.slice(0, 40);
+    this.dungeon = {
+      start: { x: sx + 0.5, y: floorY + 0.2, z: sz + 0.5 },
+      boss: { x: bx + 0.5, y: floorY + 0.1, z: bz + 0.5 },
+      portal: { x: bx + 0.5, y: floorY, z: bz - 5.5 },
+      spawns: spawns.slice(0, 22),
+      chests: [
+        { x: bx - 3, y: floorY, z: bz - 3 },
+        { x: bx + 3, y: floorY, z: bz - 3 },
+        { x: bx, y: floorY, z: bz - 4 },
+      ],
+    };
+  }
+
   initRenderer(scene) {
     if (!this.atlas) return;
     this.material = new THREE.MeshLambertMaterial({
