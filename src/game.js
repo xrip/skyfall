@@ -4,7 +4,7 @@ import {
   CHEST_COUNT, PLAYER, ISLAND_CENTER, ARMOR_SETS, ARMOR_SLOTS, ARMOR_SET_ORDER, ARMOR_DROP,
   HAZARD, ZONE, ZONE_NAMES,
   RUN_MODES, ENDLESS, DIFFICULTIES, DIFFICULTY_BY_ID,
-  WEAPON_PARTS, WEAPON_PAINTS, WEAPON_UPGRADE, AIRSHIP, LOOT_REFRESH, ALIEN_SHOP,
+  WEAPON_PARTS, WEAPON_PAINTS, WEAPON_UPGRADE, AIRSHIP, LOOT_REFRESH, ALIEN_SHOP, BOSS_ORDER,
 } from './config.js';
 import { createAtlas, makeGlowTexture, makeSunTexture, makeMoonTexture } from './textures.js';
 import { World, worldStyleFor } from './world.js';
@@ -675,6 +675,8 @@ export class Game {
     this.spawnQueue = [];
     this.spawnIndex = 0;
     this.bossMob = null;
+    this._bossKey = null;
+    this.waveTitle = '';
     this.ended = false;
     this.dying = false;
     this.respawnTimer = 0;
@@ -713,6 +715,26 @@ export class Game {
     this.input.jumpPressed = false;
   }
 
+  // Финальный босс выбирается по seed: у хоста и гостя он совпадает.
+  bossKey() {
+    if (this._bossKey) return this._bossKey;
+    let h = ((this.seed >>> 0) ^ 0x9e3779b9) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+    this._bossKey = BOSS_ORDER[((h ^ (h >>> 16)) >>> 0) % BOSS_ORDER.length];
+    return this._bossKey;
+  }
+
+  waveTitleFor(i = this.waveIndex) {
+    const w = WAVES[i];
+    if (!w) return '';
+    if (w.bossWave) {
+      const boss = MOBS[this.bossKey()];
+      return boss ? `${w.title} · ${boss.name}` : w.title;
+    }
+    return w.title;
+  }
+
   startWave(i) {
     this.waveIndex = i;
     this.phase = 'wave';
@@ -720,18 +742,32 @@ export class Game {
     this.spawnIndex = 0;
     const w = WAVES[i];
     const q = [];
-    for (const g of w.groups) {
-      for (let k = 0; k < g.count; k++) {
-        q.push({ type: g.type, t: (g.delay || 0) + k * g.gap });
+    let bossName = w.title;
+    if (w.bossWave) {
+      const key = this.bossKey();
+      const boss = MOBS[key];
+      const [m1, m2] = boss.minions;
+      for (let k = 0; k < 7; k++) {
+        q.push({ type: m1, t: k * 2.1 });
+        q.push({ type: m2, t: 1.05 + k * 2.1 });
+      }
+      q.push({ type: key, t: 19 });
+      bossName = boss.name;
+    } else {
+      for (const g of w.groups) {
+        for (let k = 0; k < g.count; k++) {
+          q.push({ type: g.type, t: (g.delay || 0) + k * g.gap });
+        }
       }
     }
     q.sort((a, b) => a.t - b.t);
+    this.waveTitle = this.waveTitleFor(i);
     this.spawnQueue = q;
     this.waveActive = true;
     this.sound.waveHorn();
-    const name = w.title.includes('·') ? w.title.split('·')[1].trim() : w.title;
+    const name = w.bossWave ? bossName : (w.title.includes('·') ? w.title.split('·')[1].trim() : w.title);
     this.ui.banner(`ШТУРМ ${i + 1} / ${WAVES.length}`, name, w.sub, true, 3600);
-    this.ui.setWave(`ШТУРМ ${i + 1} / ${WAVES.length}`, w.title, 'Врагов осталось', String(q.length), false);
+    this.ui.setWave(`ШТУРМ ${i + 1} / ${WAVES.length}`, this.waveTitle, 'Врагов осталось', String(q.length), false);
     if (this.netRole === 'host' && this.peerJoined) this.net.send({ t: 'event', kind: 'wave', i });
   }
 
@@ -1362,6 +1398,8 @@ export class Game {
     this.ui.setHudVisible(true);
     this.ui.feedEl.innerHTML = '';
     this.createWorld(msg.seed, msg.edits);
+    this._bossKey = null;
+    this.waveTitle = '';
     this.createChests();
     for (const idx of msg.chests || []) {
       if (this.chests[idx]) this.chests[idx].markLootedQuiet();
@@ -1485,9 +1523,8 @@ export class Game {
         this.phaseTime < 10 ? 'Волна на подходе' : 'Соберите лут и постройте укрепления',
         fmt(this.phaseTime), this.phaseTime < 10);
     } else if (this.phase === 'wave') {
-      const w = WAVES[this.waveIndex];
       this.ui.setWave(`ШТУРМ ${this.waveIndex + 1} / ${WAVES.length}`,
-        w ? w.title : 'ВОЛНА', 'Врагов осталось',
+        this.waveTitleFor(this.waveIndex), 'Врагов осталось',
         String(this.guestRemaining ?? this.mobs.length), false);
     } else if (this.phase === 'break') {
       this.ui.setWave('ПЕРЕДЫШКА', 'СЛЕДУЮЩАЯ ВОЛНА', 'Укрепите позиции', fmt(this.phaseTime), true);
@@ -1710,7 +1747,7 @@ export class Game {
       this.ui.feed('<b>+15 HP</b> · передышка');
     } else if (msg.kind === 'boss') {
       this.sound.bossRoar();
-      this.ui.banner('УГРОЗА', 'ТИТАН', 'Земля дрожит. Не стойте на месте.', true, 4200);
+      this.ui.banner('УГРОЗА', msg.name || 'БОСС', msg.sub || 'Земля дрожит. Не стойте на месте.', true, 4200);
     } else if (msg.kind === 'slam') {
       this.sound.bossRoar();
       this.effects.ring(msg.x, msg.y + 0.1, msg.z, 0xff5a3d, 11, 0.8);
@@ -1870,10 +1907,10 @@ export class Game {
     this.sound.spawn();
     if (cfg.boss) {
       this.bossMob = mob;
-      this.ui.banner('УГРОЗА', 'ТИТАН', 'Земля дрожит. Не стойте на месте.', true, 4200);
+      this.ui.banner('УГРОЗА', cfg.name, cfg.subtitle || 'Земля дрожит. Не стойте на месте.', true, 4200);
       this.sound.bossRoar();
       this.ui.showBoss(cfg.name, 1);
-      if (this.netRole === 'host' && this.peerJoined) this.net.send({ t: 'event', kind: 'boss' });
+      if (this.netRole === 'host' && this.peerJoined) this.net.send({ t: 'event', kind: 'boss', name: cfg.name, sub: cfg.subtitle || '' });
     }
   }
 
@@ -1891,21 +1928,21 @@ export class Game {
     return this.pickSpawnPoint();
   }
 
-  spawnAdds(pos, count) {
+  spawnAdds(pos, count, type = 'grunt') {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2;
       const x = pos.x + Math.cos(a) * 3.2;
       const z = pos.z + Math.sin(a) * 3.2;
       let y = this.world.groundHeight(x, z);
       if (y < 0) y = pos.y;
-      const mob = new Mob(this, 'grunt', { x, y: y + 0.1, z });
+      const mob = new Mob(this, type, { x, y: y + 0.1, z });
       mob.ensureFreeSpot();
       mob.group.position.copy(mob.pos);
       this.mobs.push(mob);
       this.effects.spawn(x, y + 1, z, 0xff6a7a, 14, { speed: 2, up: 3, size: 0.08, life: 0.9 });
       this.sound.spawn();
     }
-    this.ui.feed('<b>ТИТАН ПРИЗЫВАЕТ ПОДМОГУ</b>', true);
+    this.ui.feed('<b>БОСС ПРИЗЫВАЕТ ПОДМОГУ</b>', true);
   }
 
   throwRock(mob, dmg) {
@@ -1940,7 +1977,9 @@ export class Game {
   }
 
   bossSlam(boss) {
-    this.effects.ring(boss.pos.x, boss.pos.y + 0.1, boss.pos.z, 0xff5a3d, 11, 0.8);
+    const rad = boss.cfg.slamRadius ?? 9.5;
+    const dmg = boss.cfg.slamDamage ?? 30;
+    this.effects.ring(boss.pos.x, boss.pos.y + 0.1, boss.pos.z, 0xff5a3d, rad + 1.5, 0.8);
     this.effects.spawn(boss.pos.x, boss.pos.y + 0.4, boss.pos.z, 0xffa060, 30, {
       speed: 6, up: 3, size: 0.12, life: 0.9,
     });
@@ -1949,14 +1988,14 @@ export class Game {
       this.net.send({ t: 'event', kind: 'slam', x: +boss.pos.x.toFixed(2), y: +boss.pos.y.toFixed(2), z: +boss.pos.z.toFixed(2) });
     }
     const d = Math.hypot(this.player.pos.x - boss.pos.x, this.player.pos.z - boss.pos.z);
-    if (d < 9.5 && Math.abs(this.player.pos.y - boss.pos.y) < 4 && this.player.alive) {
-      this.damagePlayer(30, boss.pos, 'УДАРНАЯ ВОЛНА');
+    if (d < rad && Math.abs(this.player.pos.y - boss.pos.y) < 4 && this.player.alive) {
+      this.damagePlayer(dmg, boss.pos, 'УДАРНАЯ ВОЛНА');
       this.player.vel.y = Math.max(this.player.vel.y, 5);
     }
     if (this.netRole === 'host' && this.peerJoined && this.remote.ready && this.remote.alive) {
       const rd = Math.hypot(this.remote.pos.x - boss.pos.x, this.remote.pos.z - boss.pos.z);
-      if (rd < 9.5 && Math.abs(this.remote.pos.y - boss.pos.y) < 4) {
-        this.hurtRemote(30, boss.pos, 'УДАРНАЯ ВОЛНА');
+      if (rd < rad && Math.abs(this.remote.pos.y - boss.pos.y) < 4) {
+        this.hurtRemote(dmg, boss.pos, 'УДАРНАЯ ВОЛНА');
       }
     }
   }
@@ -2011,7 +2050,7 @@ export class Game {
       } else {
         const remaining = this.mobs.length + (this.spawnQueue.length - this.spawnIndex);
         this.ui.setWave(`ШТУРМ ${this.waveIndex + 1} / ${WAVES.length}`,
-          WAVES[this.waveIndex].title, 'Врагов осталось', String(remaining), false);
+          this.waveTitleFor(this.waveIndex), 'Врагов осталось', String(remaining), false);
       }
     }
   }
@@ -2257,7 +2296,7 @@ export class Game {
     if (mob === this.bossMob) {
       this.bossMob = null;
       this.ui.hideBoss();
-      this.ui.banner('ЦЕЛЬ УНИЧТОЖЕНА', 'ТИТАН ПАЛ', 'Добивайте оставшихся', false, 3200);
+      this.ui.banner(mob.cfg.name, 'БОСС ПОВЕРЖЕН', 'Добивайте оставшихся', false, 3200);
       this.sound.waveClear();
     }
     if (!voided) {

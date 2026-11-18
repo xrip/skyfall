@@ -413,7 +413,7 @@ export const WEAPONS = {
   },
 };
 
-export const MOBS = {
+const CORE_MOBS = {
   grunt: {
     name: 'ГРОМИЛА', hp: 70, speed: 3.6, dmg: 14, range: 2.0, attackCd: 1.0,
     radius: 0.42, height: 1.9, score: 100, flying: false, body: 0x53614b, head: 0x788a68,
@@ -456,6 +456,201 @@ export const MOBS = {
   },
 };
 
+/* ---------- Свита восьми финальных боссов ----------
+   У каждого босса два уникальных моба, и только они выходят в третьей волне. */
+
+const MINIONS = {
+  /* КОЛОСС — камень */
+  guard: {
+    name: 'КАМЕННЫЙ СТРАЖ', hp: 210, speed: 2.8, dmg: 20, range: 2.3, attackCd: 1.35,
+    radius: 0.6, height: 2.2, score: 240, shape: 'brute',
+    body: 0x6d7264, head: 0x8b907f, accent: 0x393d34, eye: 0xffd27a, spikes: true,
+  },
+  shard: {
+    name: 'ОСКОЛОК', hp: 85, speed: 3.9, dmg: 11, range: 12, attackCd: 2.0,
+    radius: 0.34, height: 0.9, score: 200, flying: true, shape: 'flyer',
+    hoverHeight: 3.4, keepRange: 9, minRange: 4.5, castRange: 16,
+    projSpeed: 20, projDmg: 12, projColor: 0xffe0a0,
+    body: 0xb7b0a0, head: 0xd8d2c2, accent: 0x6b6a60, eye: 0xffd27a,
+  },
+
+  /* ЖНЕЦ — смерть */
+  ghoul: {
+    name: 'УПЫРЬ', hp: 140, speed: 3.9, dmg: 16, range: 2.0, attackCd: 1.1,
+    radius: 0.4, height: 1.9, score: 220, shape: 'humanoid',
+    body: 0x5f6b5a, head: 0x94a08a, accent: 0x2a3028, eye: 0x9dffc4, horns: true,
+  },
+  wisp: {
+    name: 'БЛУЖДАЮЩИЙ ОГОНЁК', hp: 75, speed: 3.6, dmg: 10, range: 14, attackCd: 2.2,
+    radius: 0.32, height: 0.8, score: 210, flying: true, shape: 'flyer',
+    hoverHeight: 3.8, keepRange: 10, minRange: 5, castRange: 18,
+    projSpeed: 18, projDmg: 14, projColor: 0x9dffc4,
+    body: 0x2e2839, head: 0x6b5f86, accent: 0x14111c, eye: 0x9dffc4,
+  },
+
+  /* МАТКА — улей */
+  larva: {
+    name: 'ЛИЧИНКА', hp: 120, speed: 4.1, dmg: 12, range: 1.8, attackCd: 0.95,
+    radius: 0.4, height: 0.9, score: 200, shape: 'beast',
+    body: 0x8a7a2e, head: 0x5a4c1c, accent: 0x1d1a0e, eye: 0xffe14a,
+  },
+  stinger: {
+    name: 'ЖАЛО', hp: 90, speed: 3.8, dmg: 11, range: 12, attackCd: 1.9,
+    radius: 0.34, height: 0.8, score: 210, flying: true, shape: 'flyer',
+    hoverHeight: 3.2, keepRange: 8, minRange: 4, castRange: 16,
+    projSpeed: 24, projDmg: 12, projColor: 0xffe14a,
+    body: 0x3a3218, head: 0x8a7a2e, accent: 0x1d1a0e, eye: 0xffe14a,
+  },
+
+  /* ПЛАВЕНЬ — магма */
+  hound: {
+    name: 'МАГМА-ГОНЧАЯ', hp: 170, speed: 4.2, dmg: 18, range: 2.0, attackCd: 1.05,
+    radius: 0.45, height: 1.1, score: 240, shape: 'beast',
+    body: 0x4a2420, head: 0x6b2f24, accent: 0x1c0d0c, eye: 0xff7a2a, spikes: true,
+  },
+  ember: {
+    name: 'ИСКРА', hp: 80, speed: 4.0, dmg: 10, range: 12, attackCd: 1.8,
+    radius: 0.3, height: 0.7, score: 210, flying: true, shape: 'flyer',
+    hoverHeight: 3.4, keepRange: 9, minRange: 4.5, castRange: 15,
+    projSpeed: 20, projDmg: 12, projColor: 0xffb144,
+    body: 0x6b2f24, head: 0xff7a2a, accent: 0x1c0d0c, eye: 0xffb144,
+  },
+
+  /* ХРАНИТЕЛЬ — кристалл */
+  sentinel: {
+    name: 'КРИСТАЛЬНЫЙ ЧАСОВОЙ', hp: 210, speed: 2.9, dmg: 20, range: 2.4, attackCd: 1.3,
+    radius: 0.5, height: 2.2, score: 260, shape: 'humanoid',
+    body: 0x2f5a6b, head: 0x5fd8e8, accent: 0x1b3440, eye: 0xa8f6ff, spikes: true,
+  },
+  beam: {
+    name: 'ЛУЧ', hp: 95, speed: 3.5, dmg: 12, range: 16, attackCd: 2.3,
+    radius: 0.34, height: 1.2, score: 250, flying: true, shape: 'crystal',
+    hoverHeight: 3.0, keepRange: 12, minRange: 6, castRange: 22,
+    projSpeed: 28, projDmg: 15, projColor: 0xa8f6ff,
+    body: 0x2f5a6b, head: 0x5fd8e8, accent: 0x1b3440, eye: 0xa8f6ff,
+  },
+
+  /* ПАСТУХ — пришельцы */
+  prober: {
+    name: 'ЗОНД', hp: 80, speed: 4.2, dmg: 9, range: 14, attackCd: 1.7,
+    radius: 0.34, height: 0.9, score: 230, flying: true, shape: 'drone',
+    hoverHeight: 3.0, keepRange: 9, minRange: 4, castRange: 18,
+    projSpeed: 22, projDmg: 11, projColor: 0xc6ff6a,
+    body: 0x4d6b4a, head: 0x8fc98a, accent: 0x22331f, eye: 0xc6ff6a,
+  },
+  abductor: {
+    name: 'ПОХИТИТЕЛЬ', hp: 160, speed: 3.1, dmg: 15, range: 2.2, attackCd: 1.2,
+    radius: 0.42, height: 2.0, score: 250, shape: 'humanoid', caster: true,
+    castRange: 14, castCd: 2.6, stopRange: 9, keepDistance: 5,
+    projSpeed: 20, projDmg: 12, projColor: 0xc6ff6a,
+    body: 0x4d6b4a, head: 0x8fc98a, accent: 0x22331f, eye: 0xc6ff6a, crown: true,
+  },
+
+  /* БУРЯ — гроза */
+  thunder: {
+    name: 'ГРОМ', hp: 190, speed: 3.9, dmg: 20, range: 2.1, attackCd: 1.15,
+    radius: 0.5, height: 1.2, score: 250, shape: 'beast',
+    body: 0x2f4a6b, head: 0x5a8ac9, accent: 0x1a2a40, eye: 0x9fe0ff, spikes: true,
+  },
+  ball: {
+    name: 'ШАРОВАЯ МОЛНИЯ', hp: 85, speed: 3.8, dmg: 11, range: 15, attackCd: 1.9,
+    radius: 0.36, height: 0.9, score: 230, flying: true, shape: 'drone',
+    hoverHeight: 3.6, keepRange: 10, minRange: 5, castRange: 20,
+    projSpeed: 24, projDmg: 13, projColor: 0x9fe0ff,
+    body: 0x5a8ac9, head: 0x9fe0ff, accent: 0x1a2a40, eye: 0x9fe0ff,
+  },
+
+  /* ЧЕРВЬ — пески */
+  mite: {
+    name: 'ПЕСЧАНЫЙ КЛЕЩ', hp: 110, speed: 4.3, dmg: 12, range: 1.7, attackCd: 0.9,
+    radius: 0.36, height: 0.8, score: 210, shape: 'beast',
+    body: 0x8a7040, head: 0x6b5430, accent: 0x3a2c18, eye: 0xffb144,
+  },
+  spitter: {
+    name: 'КИСЛОТНЫЙ ПЛЕВУН', hp: 150, speed: 3.0, dmg: 13, range: 2.2, attackCd: 1.2,
+    radius: 0.4, height: 1.9, score: 240, shape: 'humanoid', caster: true,
+    castRange: 15, castCd: 2.2, stopRange: 10, keepDistance: 5,
+    projSpeed: 19, projDmg: 14, projColor: 0xb6d84a,
+    body: 0x8a7040, head: 0x6b5430, accent: 0x3a2c18, eye: 0xffb144,
+  },
+};
+
+const BOSSES = {
+  colossus: {
+    name: 'КОЛОСС', title: 'КАМЕННЫЙ ГИГАНТ',
+    subtitle: 'Камень ожил. Не подпускайте его к стенам.',
+    hp: 1400, speed: 2.0, dmg: 42, range: 3.9, attackCd: 1.75,
+    radius: 1.3, height: 4.0, score: 3200, boss: true, shape: 'brute',
+    body: 0x6d7264, head: 0x8b907f, accent: 0x393d34, eye: 0xffd27a,
+    horns: true, spikes: true, minions: ['guard', 'shard'],
+    addsCount: 3, slamDamage: 36, slamRadius: 10.5,
+  },
+  reaper: {
+    name: 'ЖНЕЦ', title: 'СОБИРАТЕЛЬ ДУШ',
+    subtitle: 'Он собирает души. Не стойте на месте.',
+    hp: 1050, speed: 2.6, dmg: 38, range: 3.4, attackCd: 1.35,
+    radius: 1.0, height: 3.3, score: 3200, boss: true, shape: 'wraith',
+    body: 0x2e2839, head: 0x413a52, accent: 0x14111c, eye: 0x9dffc4,
+    minions: ['ghoul', 'wisp'], addsCount: 4, slamDamage: 28, slamRadius: 9.5,
+  },
+  hive: {
+    name: 'МАТКА', title: 'КОРОЛЕВА УЛЬЯ',
+    subtitle: 'Улей проснулся. Рой идёт за вами.',
+    hp: 1200, speed: 2.35, dmg: 34, range: 3.2, attackCd: 1.25,
+    radius: 1.15, height: 3.0, score: 3400, boss: true, shape: 'beast',
+    body: 0x8a7a2e, head: 0x4a3f1c, accent: 0x1d1a0e, eye: 0xffe14a,
+    spikes: true, minions: ['larva', 'stinger'], addsCount: 5, slamDamage: 26, slamRadius: 9,
+  },
+  magma: {
+    name: 'ПЛАВЕНЬ', title: 'МАГМОВЫЙ ТИТАН',
+    subtitle: 'Магма не остынет. Бегите.',
+    hp: 1500, speed: 1.95, dmg: 46, range: 4.0, attackCd: 1.8,
+    radius: 1.3, height: 3.9, score: 3400, boss: true, shape: 'brute',
+    body: 0x4a2420, head: 0x6b2f24, accent: 0x1c0d0c, eye: 0xff7a2a,
+    spikes: true, minions: ['hound', 'ember'], addsCount: 3, slamDamage: 40, slamRadius: 10.5,
+  },
+  warden: {
+    name: 'ХРАНИТЕЛЬ', title: 'КРИСТАЛЬНЫЙ СТРАЖ',
+    subtitle: 'Кристалл держит остров. Разбейте его.',
+    hp: 1150, speed: 2.7, dmg: 32, range: 3.0, attackCd: 1.5,
+    radius: 1.05, height: 3.0, score: 3600, boss: true, shape: 'crystal',
+    flying: true, hoverHeight: 2.6, keepRange: 11, minRange: 5.5,
+    caster: true, castRange: 24, castCd: 1.9, projSpeed: 24, projDmg: 22, projColor: 0x9fe8ff,
+    body: 0x2f5a6b, head: 0x5fd8e8, accent: 0x1b3440, eye: 0xa8f6ff,
+    minions: ['sentinel', 'beam'], addsCount: 3, slamDamage: 24, slamRadius: 9,
+  },
+  shepherd: {
+    name: 'ПАСТУХ', title: 'СЕРЫЙ ПРИШЕЛЕЦ',
+    subtitle: 'Пастух пришёл за стадом. Не будьте стадом.',
+    hp: 1100, speed: 2.5, dmg: 36, range: 3.2, attackCd: 1.4,
+    radius: 1.0, height: 3.6, score: 3600, boss: true, shape: 'humanoid',
+    body: 0x4d6b4a, head: 0x8fc98a, accent: 0x22331f, eye: 0xc6ff6a,
+    crown: true, minions: ['prober', 'abductor'], addsCount: 3, slamDamage: 26, slamRadius: 9.5,
+  },
+  storm: {
+    name: 'БУРЯ', title: 'ГРОЗОВОЙ КОЛОСС',
+    subtitle: 'Молния бьёт в одну точку. Не будьте этой точкой.',
+    hp: 1350, speed: 2.2, dmg: 40, range: 3.6, attackCd: 1.55,
+    radius: 1.2, height: 3.8, score: 3600, boss: true, shape: 'brute',
+    body: 0x2f4a6b, head: 0x5a8ac9, accent: 0x1a2a40, eye: 0x9fe0ff,
+    horns: true, caster: true, castRange: 20, castCd: 2.4, projSpeed: 26, projDmg: 24, projColor: 0x9fe0ff,
+    minions: ['thunder', 'ball'], addsCount: 3, slamDamage: 30, slamRadius: 10,
+  },
+  worm: {
+    name: 'ЧЕРВЬ', title: 'ПЕСЧАНЫЙ ЧЕРВЬ',
+    subtitle: 'Пески расступаются. Оно уже под вами.',
+    hp: 1600, speed: 1.9, dmg: 44, range: 4.2, attackCd: 1.9,
+    radius: 1.35, height: 4.2, score: 3800, boss: true, shape: 'worm',
+    body: 0x8a7040, head: 0x6b5430, accent: 0x3a2c18, eye: 0xffb144,
+    spikes: true, minions: ['mite', 'spitter'], addsCount: 3, slamDamage: 38, slamRadius: 11,
+  },
+};
+
+export const BOSS_ORDER = ['colossus', 'reaper', 'hive', 'magma', 'warden', 'shepherd', 'storm', 'worm'];
+
+export const MOBS = { ...CORE_MOBS, ...MINIONS, ...BOSSES };
+
+
 export const WAVES = [
   {
     title: 'ВОЛНА 1 · РАЗВЕДКА',
@@ -478,19 +673,10 @@ export const WAVES = [
     ],
   },
   {
-    title: 'ВОЛНА 3 · ШТУРМ',
-    sub: 'Тролль, скелеты, демоны. Титан идёт за всеми',
-    prep: 24, between: 0,
-    groups: [
-      { type: 'grunt', count: 10, gap: 1.0 },
-      { type: 'flyer', count: 4, gap: 2.2, delay: 3 },
-      { type: 'skeleton', count: 3, gap: 3.0, delay: 6 },
-      { type: 'demon', count: 3, gap: 4.0, delay: 9 },
-      { type: 'gargoyle', count: 2, gap: 5, delay: 12 },
-      { type: 'brute', count: 2, gap: 6, delay: 15 },
-      { type: 'troll', count: 1, gap: 1, delay: 18 },
-      { type: 'boss', count: 1, gap: 1, delay: 22 },
-    ],
+    title: 'ВОЛНА 3 · ФИНАЛ',
+    sub: 'Свита босса и сам хозяин острова',
+    prep: 24, between: 0, bossWave: true,
+    groups: [],
   },
 ];
 
@@ -533,6 +719,14 @@ export const CHEST_COUNT = 22;
 export const COIN_VALUE = {
   grunt: 2, skeleton: 3, flyer: 3, brute: 10,
   demon: 6, gargoyle: 7, troll: 16, boss: 40,
+  /* свита финальных боссов */
+  guard: 6, shard: 5, ghoul: 5, wisp: 5,
+  larva: 5, stinger: 5, hound: 6, ember: 5,
+  sentinel: 7, beam: 6, prober: 5, abductor: 6,
+  thunder: 7, ball: 6, mite: 5, spitter: 6,
+  /* боссы */
+  colossus: 46, reaper: 46, hive: 48, magma: 48,
+  warden: 50, shepherd: 50, storm: 52, worm: 55,
 };
 
 /* Everything the dandy sells. Weapons are keyed by WEAPONS id. */
