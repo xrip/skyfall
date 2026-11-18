@@ -11,7 +11,8 @@ The local Node server still uses the manual TURN fields.
 - Configuration: `/etc/turnserver.conf` (`root:turnserver`, mode `0640`).
 - Original configuration backup: `/root/skyfall-turn-backup/turnserver.conf.original`.
 - Shared secret: `/root/skyfall-turn-secret` (`root`, mode `0600`).
-- Client listeners: UDP and TCP `3478`.
+- Client listeners: UDP and TCP `3478`, TLS over TCP `443`.
+- TLS hostname: `turn.skyfall.akimus.ru`, DNS-only A record to the server IP.
 - Relay range: UDP `62000–62199`.
 - No host firewall was active during installation. A provider firewall must
   allow the client listeners and relay range if one is added later.
@@ -25,6 +26,26 @@ limits of 1,000,000 bytes/s per session and 12,000,000 bytes/s in total.
 Loopback, private, link-local, shared-address, and multicast peer ranges are
 blocked. The admin CLI and TCP relay allocations are disabled; client-to-TURN
 TCP connections remain enabled.
+
+## TLS and certificate renewal
+
+Certbot manages the certificate at
+`/etc/letsencrypt/live/turn.skyfall.akimus.ru/` using the Cloudflare DNS plugin.
+DNS validation needs no public HTTP listener. The API credential is stored in
+`/etc/letsencrypt/cloudflare-skyfall.ini` with root-only `0600` access.
+If the Cloudflare token is replaced, update that file as well.
+
+`certbot.timer` runs renewal checks. The deploy hook
+`/etc/letsencrypt/renewal-hooks/deploy/restart-skyfall-turn` copies the renewed
+certificate and key into `/etc/coturn/tls/`, then restarts coturn. The key is
+readable only by root and the turnserver group. A systemd drop-in grants coturn
+`CAP_NET_BIND_SERVICE` so it can listen on port 443 as the turnserver user.
+
+Check renewal without replacing the live certificate:
+
+```sh
+certbot renew --cert-name turn.skyfall.akimus.ru --dry-run
+```
 
 ## Game configuration
 
@@ -55,7 +76,7 @@ node --test tools/turn.test.mjs
 For a real relay test, use two RTCPeerConnections with
 `iceTransportPolicy: 'relay'`, exchange a DataChannel message, and check that
 the selected candidates on both sides have `candidateType: 'relay'`.
-Test UDP and TCP separately. A successful STUN response alone is not a relay test.
+Test UDP, TCP, and TLS separately. A successful STUN response alone is not a relay test.
 
 The live server passed this check from Chrome on 2026-11-18 over both UDP and
 TCP, with an echoed payload and relay candidates on both peers.
