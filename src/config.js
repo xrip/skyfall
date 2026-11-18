@@ -76,7 +76,7 @@ export const SKY_THEMES = [
     sun: true, sunColor: 0xffd27a, sunSize: 105,
     moon: false, stars: false, meteors: false,
     cloud: 0xffffff, cloudEmissive: 0xbcd2e6, cloudOpacity: 0.9,
-    zoneVolcano: 0xffb08a, zoneRad: 0xa8e08a,
+    zoneVolcano: 0xe8cbb6, zoneRad: 0xa8e08a,
   },
   {
     id: 'dusk', name: 'ЗАКАТ',
@@ -85,7 +85,7 @@ export const SKY_THEMES = [
     sun: true, sunColor: 0xff9a4a, sunSize: 120,
     moon: false, stars: false, meteors: false,
     cloud: 0xffd0b0, cloudEmissive: 0xc07060, cloudOpacity: 0.8,
-    zoneVolcano: 0xffa07a, zoneRad: 0xa8e08a,
+    zoneVolcano: 0xe2c4ae, zoneRad: 0xa8e08a,
   },
   {
     id: 'night', name: 'ЛУННАЯ НОЧЬ',
@@ -94,7 +94,7 @@ export const SKY_THEMES = [
     sun: false, sunColor: 0xffd27a, sunSize: 90,
     moon: true, moonColor: 0xdfe9ff, stars: true, meteors: false,
     cloud: 0x9fb4cc, cloudEmissive: 0x2c3e58, cloudOpacity: 0.55,
-    zoneVolcano: 0xff9a6a, zoneRad: 0x9aff7a,
+    zoneVolcano: 0xdcbda7, zoneRad: 0x9aff7a,
   },
   {
     id: 'meteor', name: 'ЗВЁЗДОПАД',
@@ -103,7 +103,7 @@ export const SKY_THEMES = [
     sun: false, sunColor: 0xffd27a, sunSize: 90,
     moon: true, moonColor: 0xffe0c0, stars: true, meteors: true,
     cloud: 0xb0a0c0, cloudEmissive: 0x4a3060, cloudOpacity: 0.6,
-    zoneVolcano: 0xff9a6a, zoneRad: 0x9aff7a,
+    zoneVolcano: 0xdcbda7, zoneRad: 0x9aff7a,
   },
   {
     id: 'blood', name: 'КРОВАВАЯ ЛУНА',
@@ -112,7 +112,7 @@ export const SKY_THEMES = [
     sun: false, sunColor: 0xff5a3c, sunSize: 100,
     moon: true, moonColor: 0xff5a3c, stars: true, meteors: true,
     cloud: 0xb06060, cloudEmissive: 0x5a2020, cloudOpacity: 0.7,
-    zoneVolcano: 0xff7a4a, zoneRad: 0xbaff6a,
+    zoneVolcano: 0xd8b7a1, zoneRad: 0xbaff6a,
   },
   {
     id: 'aurora', name: 'СЕВЕРНОЕ СИЯНИЕ',
@@ -121,7 +121,7 @@ export const SKY_THEMES = [
     sun: false, sunColor: 0x9fe8d8, sunSize: 90,
     moon: true, moonColor: 0xbff0ff, stars: true, meteors: false,
     cloud: 0x8ac0c0, cloudEmissive: 0x1a4a50, cloudOpacity: 0.5,
-    zoneVolcano: 0xff9a6a, zoneRad: 0x7affc0,
+    zoneVolcano: 0xdcbda7, zoneRad: 0x7affc0,
   },
   {
     id: 'overcast', name: 'ПАСМУРНО',
@@ -130,7 +130,7 @@ export const SKY_THEMES = [
     sun: false, sunColor: 0xffd27a, sunSize: 90,
     moon: false, stars: false, meteors: false,
     cloud: 0xffffff, cloudEmissive: 0x808898, cloudOpacity: 1,
-    zoneVolcano: 0xffb08a, zoneRad: 0xa8e08a,
+    zoneVolcano: 0xe8cbb6, zoneRad: 0xa8e08a,
   },
   {
     id: 'toxic', name: 'ЯДОВИТЫЙ РАССВЕТ',
@@ -139,7 +139,7 @@ export const SKY_THEMES = [
     sun: true, sunColor: 0xd8ff8a, sunSize: 95,
     moon: false, stars: false, meteors: false,
     cloud: 0xc8e0a0, cloudEmissive: 0x6a7a40, cloudOpacity: 0.8,
-    zoneVolcano: 0xffa07a, zoneRad: 0x9aff6a,
+    zoneVolcano: 0xe2c4ae, zoneRad: 0x9aff6a,
   },
 ];
 

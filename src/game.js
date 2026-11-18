@@ -663,6 +663,7 @@ export class Game {
     if (this.runMode === 'sandbox') {
       this.phase = 'sandbox';
       this.phaseTime = 0;
+      this.sandboxTimer = 2.5;
     } else if (this.runMode === 'endless') {
       this.phase = 'endlessPrep';
       this.phaseTime = ENDLESS.firstDelay;
@@ -699,7 +700,9 @@ export class Game {
     this.ui.hideBoss();
     this.ui.updateCompass('');
     if (this.runMode === 'sandbox') {
-      this.ui.setWave('ПЕСОЧНИЦА', 'СТРОЙТЕ СВОБОДНО', 'Все блоки и патроны бесконечны', '∞', false);
+      this.ui.setWave('ПЕСОЧНИЦА', 'ВОЛНЫ БЕСКОНЕЧНЫ', 'Стройте, стреляйте, выживайте', '∞', false);
+      const first = ['grunt', 'grunt', 'skeleton', 'flyer', 'demon'];
+      for (let i = 0; i < 4; i++) this.spawnMob(first[i], this.sandboxSpawnPoint(18, 30));
     } else if (this.runMode === 'endless') {
       this.ui.setWave('АТАКА 1', 'ПОДГОТОВКА', 'Стройте остров · первая атака через 4 минуты', fmt(this.phaseTime), false);
     }
@@ -1462,7 +1465,8 @@ export class Game {
 
   updateGuestHud() {
     if (this.runMode === 'sandbox') {
-      this.ui.setWave('ПЕСОЧНИЦА', 'СТРОЙТЕ СВОБОДНО', 'Все блоки и патроны бесконечны', '∞', false);
+      this.ui.setWave('ПЕСОЧНИЦА', 'ВОЛНЫ БЕСКОНЕЧНЫ',
+        `Врагов на острове: ${this.guestRemaining ?? this.mobs.length}`, '∞', false);
       return;
     }
     if (this.runMode === 'endless') {
@@ -1757,7 +1761,7 @@ export class Game {
   }
 
   getMobTargets() {
-    const list = [{ pos: this.player.pos, alive: this.player.alive, remote: false }];
+    const list = [{ pos: this.player.pos, vel: this.player.vel, alive: this.player.alive, remote: false }];
     if (this.netRole === 'host' && this.peerJoined && this.remote.ready) {
       list.push({ pos: this.remote.pos, alive: this.remote.alive, remote: true });
     }
@@ -1851,8 +1855,8 @@ export class Game {
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  spawnMob(type) {
-    const p = this.pickSpawnPoint();
+  spawnMob(type, at = null) {
+    const p = at || this.pickSpawnPoint();
     const cfg = MOBS[type];
     const y = cfg.flying ? p.y + rand(6, 9) : p.y + 0.1;
     const mob = new Mob(this, type, { x: p.x + rand(-1.6, 1.6), y, z: p.z + rand(-1.6, 1.6) });
@@ -1871,6 +1875,20 @@ export class Game {
       this.ui.showBoss(cfg.name, 1);
       if (this.netRole === 'host' && this.peerJoined) this.net.send({ t: 'event', kind: 'boss' });
     }
+  }
+
+  // В песочнице враги появляются кольцом вокруг игрока, а не на краю острова.
+  sandboxSpawnPoint(minR = 22, maxR = 38) {
+    const p = this.player.pos;
+    for (let i = 0; i < 24; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = minR + Math.random() * (maxR - minR);
+      const x = p.x + Math.cos(a) * r;
+      const z = p.z + Math.sin(a) * r;
+      const y = this.world.groundHeight(x, z);
+      if (y > 0 && Math.abs(y - p.y) < 14) return { x: x + 0.5, y: y + 0.1, z: z + 0.5 };
+    }
+    return this.pickSpawnPoint();
   }
 
   spawnAdds(pos, count) {
@@ -1945,7 +1963,10 @@ export class Game {
 
   updateWaves(dt) {
     this.waveActive = this.phase === 'wave';
-    if (this.runMode === 'sandbox') return;
+    if (this.runMode === 'sandbox') {
+      this.updateSandbox(dt);
+      return;
+    }
     if (this.runMode === 'endless') {
       if (this.phase === 'endlessPrep') {
         this.phaseTime -= dt;
@@ -1993,6 +2014,18 @@ export class Game {
           WAVES[this.waveIndex].title, 'Врагов осталось', String(remaining), false);
       }
     }
+  }
+
+  updateSandbox(dt) {
+    this.sandboxTimer = Math.max(0, (this.sandboxTimer || 0) - dt);
+    const cap = 9;
+    if (this.sandboxTimer <= 0 && this.mobs.length < cap) {
+      this.sandboxTimer = 3.2 + Math.random() * 2.4;
+      const pool = ['grunt', 'grunt', 'skeleton', 'flyer', 'demon', 'gargoyle', 'brute'];
+      if (this.mobs.length === 0) pool.push('troll', 'troll');
+      this.spawnMob(pool[(Math.random() * pool.length) | 0], this.sandboxSpawnPoint());
+    }
+    this.ui.setWave('ПЕСОЧНИЦА', 'ВОЛНЫ БЕСКОНЕЧНЫ', `Врагов на острове: ${this.mobs.length}`, '∞', false);
   }
 
   updateLootRefresh(dt) {
@@ -2881,12 +2914,6 @@ export class Game {
     const inRad = zone === ZONE.RADIATION;
     const inVol = zone === ZONE.VOLCANO;
 
-    if (this.runMode === 'sandbox') {
-      this.ui.setHazard('');
-      this.ui.setZone(ZONE_NAMES[zone], inRad ? 'химзащита не нужна' : inVol ? 'магма не жжёт' : '—', inRad ? 'radiation' : inVol ? 'volcano' : '');
-      return;
-    }
-
     let warning = '';
     let warningCls = '';
     if (onMagma) {
@@ -2910,7 +2937,11 @@ export class Game {
 
     if (this.baseFogColor) {
       const hex = inRad ? this.theme?.zoneRad : inVol ? this.theme?.zoneVolcano : this.theme?.fog;
-      if (hex !== undefined) this.zoneFogColor.setHex(hex);
+      if (hex !== undefined) {
+        this.zoneFogColor.setHex(hex);
+        // вулкан только подкрашивает воздух, а не заливает экран красным
+        if (inVol) this.zoneFogColor.lerp(this.baseFogColor, 0.55);
+      }
     }
 
     this.zoneFeedCd = Math.max(0, this.zoneFeedCd - dt);

@@ -874,7 +874,6 @@ export class Player {
   }
 
   damage(amount, source, name) {
-    if (this.sandbox) return;
     if (!this.alive || this.invuln > 0) return;
     const now = this.game.time;
     if (now - this.lastDamage < 0.1) return;
@@ -889,7 +888,7 @@ export class Player {
     this.regenTimer = 0;
     this.shake = Math.min(1.2, this.shake + 0.5 + amount * 0.012);
     this.game.sound.hurt();
-    this.game.ui.damageFlash(Math.min(1, amount / 35 + 0.25));
+    this.game.ui.damageFlash(Math.min(0.5, amount / 90 + 0.08));
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
@@ -1285,11 +1284,14 @@ export class Player {
     const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
     if (y < 0 || y >= this.game.world.SY) return;
     if (this.game.world.isSolid(x, y, z)) return;
-    // do not entomb the player
+    // do not entomb the player: учитываем только реальное пересечение,
+    // иначе блок под ногами (на 1-2 мм ниже) считается «занятым»
     const r = PLAYER.radius;
-    if (x + 1 > this.pos.x - r && x < this.pos.x + r &&
-        y + 1 > this.pos.y && y < this.pos.y + this.hitboxHeight &&
-        z + 1 > this.pos.z - r && z < this.pos.z + r) {
+    const pad = 0.05;
+    const ox = Math.min(x + 1, this.pos.x + r) - Math.max(x, this.pos.x - r);
+    const oy = Math.min(y + 1, this.pos.y + this.hitboxHeight) - Math.max(y, this.pos.y);
+    const oz = Math.min(z + 1, this.pos.z + r) - Math.max(z, this.pos.z - r);
+    if (ox > pad && oy > pad && oz > pad) {
       this.game.ui.feed('Здесь стоите вы', true);
       this.placeCd = 0.3;
       return;

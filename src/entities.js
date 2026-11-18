@@ -322,6 +322,12 @@ export class Mob {
     this.pendingCast = false;
     this.blockedByVoid = false;
 
+    // AI state: сторона обхода, фланг и таймер решения
+    this.aiSide = Math.random() < 0.5 ? 1 : -1;
+    this.aiTurn = 0;
+    this.aiAngle = null;
+    this.flank = ((this.id * 2.399963) % (Math.PI * 2)) - Math.PI;
+
     const model = getMobModel(type);
     this.group = new THREE.Group();
     this.parts = {};
@@ -407,13 +413,49 @@ export class Mob {
     return false;
   }
 
-  probeFree(dx, dz) {
-    const r = this.cfg.radius + 0.4;
+  probeFree(dx, dz, extra = 0.4) {
+    const r = this.cfg.radius + extra;
     const x = this.pos.x + dx * r;
     const z = this.pos.z + dz * r;
     if (this.collidesAt(x, this.pos.y + 0.05, z)) return false;
     if (this.collidesAt(x, this.pos.y + Math.min(1.1, this.cfg.height * 0.65), z)) return false;
     return true;
+  }
+
+  // Выбираем угол обхода: сначала та же сторона, чтобы моб не дёргался
+  // между двумя «равно свободными» направлениями.
+  pickDetour(dirX, dirZ) {
+    const cands = [];
+    for (const a of [0.45, 0.85, 1.3, 1.75]) cands.push(a * this.aiSide, -a * this.aiSide);
+    let best = null;
+    let bestScore = -2;
+    for (const ang of cands) {
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const nx = dirX * ca - dirZ * sa;
+      const nz = dirX * sa + dirZ * ca;
+      if (!this.probeFree(nx, nz, 0.45)) continue;
+      if (!this.probeFree(nx, nz, 1.35)) continue;
+      let score = nx * dirX + nz * dirZ;
+      score -= Math.abs(ang) * 0.07;
+      if (Math.sign(ang) !== this.aiSide) score -= 0.3;
+      if (score > bestScore) { bestScore = score; best = ang; }
+    }
+    return best;
+  }
+
+  // Упреждение: целимся туда, где цель будет через время полёта снаряда.
+  predictAim(target, from, speed) {
+    const to = target.pos.clone();
+    to.y += 1.15;
+    const v = target.vel;
+    if (v) {
+      const dist = from.distanceTo(to);
+      const t = Math.min(1.0, dist / Math.max(6, speed)) * 0.6;
+      to.x += v.x * t;
+      to.z += v.z * t;
+      to.y += Math.max(-2.5, Math.min(2.5, v.y * t * 0.4));
+    }
+    return to;
   }
 
   tryBreakBlock(dt, dirX, dirZ, distH, target) {
@@ -612,11 +654,15 @@ export class Mob {
 
   updateWalker(dt, dirX, dirZ, distH, py, target) {
     const cfg = this.cfg;
-    const speed = cfg.speed * (this.enraged ? 1.3 : 1);
+    const speed = cfg.speed * (this.enraged ? 1.35 : 1);
     let mx = 0, mz = 0;
     const stopAt = cfg.stopRange ?? cfg.range * 0.86;
     const keepAt = cfg.keepDistance ?? cfg.range * 0.55;
-    const forwardFree = this.probeFree(dirX, dirZ);
+    const forwardFree = this.probeFree(dirX, dirZ, 0.35);
+    const aheadFree = this.probeFree(dirX, dirZ, 1.45);
+
+    this.aiTurn = Math.max(0, this.aiTurn - dt);
+    if (forwardFree && aheadFree) this.aiAngle = null;
 
     if (!forwardFree && this.attackWind <= 0) {
       this.tryBreakBlock(dt, dirX, dirZ, distH, target);
@@ -627,26 +673,48 @@ export class Mob {
 
     if (this.attackWind <= 0) {
       if (distH > stopAt) {
-        if (forwardFree) {
-          mx = dirX * speed; mz = dirZ * speed;
+        if (forwardFree && aheadFree) {
+          let ax = dirX, az = dirZ;
+          // фланг: подходим по дуге, чтобы не выстраиваться в очередь
+          if (!cfg.caster) {
+            const off = Math.sin(this.flank) * 0.55;
+            const ca = Math.cos(off), sa = Math.sin(off);
+            const fx = dirX * ca - dirZ * sa;
+            const fz = dirX * sa + dirZ * ca;
+            if (this.probeFree(fx, fz, 0.35)) { ax = fx; az = fz; }
+          }
+          mx = ax * speed; mz = az * speed;
         } else {
-          // simple wall avoidance: try left/right angles, prefer the one closest to the target
-          let best = null, bestDot = -2;
-          for (const ang of [0.55, -0.55, 1.05, -1.05, 1.55, -1.55]) {
-            const ca = Math.cos(ang), sa = Math.sin(ang);
+          // обход: решение принимается не каждый кадр, а раз в 0.4–0.65 с,
+          // иначе мобы дёргаются между двумя свободными сторонами
+          if (this.aiTurn <= 0) {
+            const ang = this.pickDetour(dirX, dirZ);
+            if (ang === null) {
+              this.aiSide = -this.aiSide;
+              this.aiAngle = null;
+            } else {
+              this.aiAngle = ang;
+            }
+            this.aiTurn = 0.4 + Math.random() * 0.25;
+          }
+          if (this.aiAngle !== null) {
+            const ca = Math.cos(this.aiAngle), sa = Math.sin(this.aiAngle);
             const nx = dirX * ca - dirZ * sa;
             const nz = dirX * sa + dirZ * ca;
-            if (!this.probeFree(nx, nz)) continue;
-            const dot = nx * dirX + nz * dirZ;
-            if (dot > bestDot) { best = [nx, nz]; bestDot = dot; }
+            mx = nx * speed; mz = nz * speed;
+          } else {
+            // зажали со всех сторон — давим стену, её сломает tryBreakBlock
+            mx = dirX * speed * 0.18; mz = dirZ * speed * 0.18;
           }
-          if (best) { mx = best[0] * speed; mz = best[1] * speed; }
-          else { mx = dirX * speed * 0.15; mz = dirZ * speed * 0.15; }
         }
       } else if (distH < keepAt) {
         mx = -dirX * speed * (cfg.caster ? 0.7 : 0.3);
         mz = -dirZ * speed * (cfg.caster ? 0.7 : 0.3);
       }
+    } else {
+      // во время замаха не замираем, а продолжаем давить
+      mx = dirX * speed * 0.35;
+      mz = dirZ * speed * 0.35;
     }
 
     // separation
@@ -656,7 +724,7 @@ export class Mob {
       const d = Math.hypot(ox, oz);
       const min = this.cfg.radius + other.cfg.radius + 0.15;
       if (d > 0.001 && d < min) {
-        const f = (1 - d / min) * speed * 1.3;
+        const f = (1 - d / min) * speed * 1.7;
         mx += (ox / d) * f; mz += (oz / d) * f;
       }
     }
@@ -716,8 +784,7 @@ export class Mob {
     const cfg = this.cfg;
     const from = this.pos.clone();
     from.y += cfg.height * 0.72;
-    const to = target.pos.clone();
-    to.y += 1.15;
+    const to = this.predictAim(target, from, cfg.projSpeed ?? 17);
     const dir = to.sub(from).normalize();
     if (cfg.projBig) dir.y += 0.16;
     dir.normalize();
@@ -760,12 +827,13 @@ export class Mob {
     if (this.pos.y > 72) this.pos.y = 72;
 
     const d = Math.hypot(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
-    const dy = target.pos.y + 1.1 - (this.pos.y + h * 0.5);
     if (this.attackCd <= 0 && d < (cfg.castRange ?? 19)) {
       this.attackCd = cfg.attackCd;
-      const aim = new THREE.Vector3(target.pos.x - this.pos.x, dy, target.pos.z - this.pos.z).normalize();
+      const from = this.pos.clone().add(new THREE.Vector3(0, h * 0.55, 0));
+      const to = this.predictAim(target, from, cfg.projSpeed ?? 17);
+      const aim = to.sub(from).normalize();
       this.game.spawnEnemyProjectile(
-        this.pos.clone().add(new THREE.Vector3(0, h * 0.55, 0)),
+        from,
         aim, cfg.projSpeed ?? 17, cfg.projDmg ?? cfg.dmg,
         !!cfg.projBig, cfg.projColor ?? 0xffb060
       );
