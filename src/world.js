@@ -1295,7 +1295,7 @@ export class World {
   }
 
   /* ---------------- meshing ---------------- */
-  // Отдельный мир-подземелье: лабиринт из коридоров, зал босса и награда.
+  // Отдельный мир-подземелье: длинная извилистая пещера с одним маршрутом.
   generateDungeon(seed, atlas) {
     this.seed = seed;
     this.atlas = atlas;
@@ -1303,145 +1303,115 @@ export class World {
     this.skyTheme = SKY_THEMES[0];
     this.dungeon = null;
 
-    // детерминированный ГПСЧ: у хоста и гостя должен быть один лабиринт
+    // детерминированный ГПСЧ: у хоста и гостя одна и та же пещера
     let rndState = ((seed >>> 0) ^ 0x9e3779b9) >>> 0 || 1;
     const rnd = () => {
       rndState = (Math.imul(rndState, 1664525) + 1013904223) >>> 0;
       return rndState / 4294967296;
     };
 
-    const cells = 13;
-    const cell = 5;
+    const cx = ISLAND_CENTER.x, cz = ISLAND_CENTER.z;
     const floorY = 30;
-    const cx0 = ISLAND_CENTER.x - Math.floor((cells * cell) / 2);
-    const cz0 = ISLAND_CENTER.z - Math.floor((cells * cell) / 2);
+    const start = { x: cx - 42, z: cz - 42 };
 
-    const floorSet = new Set();
-    const carve = (x, z) => {
-      if (x < 2 || z < 2 || x >= SX - 2 || z >= SZ - 2) return;
-      for (let y = floorY; y < floorY + 3; y++) this.setRaw(x, y, z, 0);
-      this.setRaw(x, floorY - 1, z, B.BRICK);
-      this.setRaw(x, floorY + 3, z, B.BRICK);
-      this.heights[x + z * SX] = floorY - 1;
-      floorSet.add(x + z * SX);
-    };
-    const carveRect = (x1, z1, x2, z2) => {
-      for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) carve(x, z);
-    };
+    // один длинный маршрут: несколько поворотов, без развилок
+    const legs = [[30, 0], [0, 18], [24, 0], [0, -14], [20, 0], [0, 18], [26, 0]];
+    const path = [{ x: start.x, z: start.z, r: 5 }];
+    let px = start.x, pz = start.z;
+    let dirX = 1, dirZ = 0;
+    for (const [dx, dz] of legs) {
+      const len = Math.max(Math.abs(dx), Math.abs(dz));
+      const sx = Math.sign(dx), sz = Math.sign(dz);
+      for (let i = 0; i < len; i++) {
+        px += sx; pz += sz;
+        dirX = sx || 0; dirZ = sz || 0;
+        path.push({ x: px, z: pz, r: 3 + rnd() * 1.4 });
+      }
+    }
+    const end = path[path.length - 1];
 
-    // сплошной камень, из которого вырезаем лабиринт
-    const pad = 4;
-    for (let x = cx0 - pad; x <= cx0 + cells * cell + pad; x++) {
-      for (let z = cz0 - pad; z <= cz0 + cells * cell + pad; z++) {
-        for (let y = floorY - 1; y <= floorY + 3; y++) {
-          this.setRaw(x, y, z, y === floorY + 3 ? B.BRICK : B.STONE);
+    // сплошной камень вокруг маршрута
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of path) {
+      minX = Math.min(minX, p.x - 7); maxX = Math.max(maxX, p.x + 7);
+      minZ = Math.min(minZ, p.z - 7); maxZ = Math.max(maxZ, p.z + 7);
+    }
+    minX = Math.max(2, minX - 10); maxX = Math.min(SX - 2, maxX + 10);
+    minZ = Math.max(2, minZ - 10); maxZ = Math.min(SZ - 2, maxZ + 10);
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        for (let y = floorY; y <= floorY + 9; y++) this.setRaw(x, y, z, B.STONE);
+      }
+    }
+
+    const carveDisc = (cx0, cz0, r, airH) => {
+      const r2 = r * r;
+      const h = airH + Math.floor(rnd() * 2);
+      const span = Math.ceil(r);
+      for (let dz = -span; dz <= span; dz++) {
+        for (let dx = -span; dx <= span; dx++) {
+          if (dx * dx + dz * dz > r2) continue;
+          const x = Math.floor(cx0 + dx), z = Math.floor(cz0 + dz);
+          if (x < 2 || z < 2 || x >= SX - 2 || z >= SZ - 2) continue;
+          for (let y = floorY; y < floorY + h; y++) this.setRaw(x, y, z, 0);
+          this.setRaw(x, floorY - 1, z, rnd() < 0.12 ? B.RUST : B.STONE);
+          this.setRaw(x, floorY + h, z, B.STONE);
+          this.heights[x + z * SX] = floorY - 1;
         }
       }
-    }
-
-    const centerOf = (i, j) => [cx0 + i * cell + 2, cz0 + j * cell + 2];
-    const link = (i, j, ni, nj) => {
-      const [ax, az] = centerOf(i, j);
-      const [bx, bz] = centerOf(ni, nj);
-      if (az === bz) {
-        const x1 = Math.min(ax, bx) - 1, x2 = Math.max(ax, bx) + 1;
-        carveRect(x1, az - 1, x2, az + 1);
-      } else {
-        const z1 = Math.min(az, bz) - 1, z2 = Math.max(az, bz) + 1;
-        carveRect(ax - 1, z1, ax + 1, z2);
-      }
     };
 
-    // DFS-лабиринт
-    const seen = new Uint8Array(cells * cells);
-    const stack = [[0, 0]];
-    seen[0] = 1;
-    {
-      const [sx, sz] = centerOf(0, 0);
-      carveRect(sx - 1, sz - 1, sx + 1, sz + 1);
-    }
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    while (stack.length) {
-      const cur = stack[stack.length - 1];
-      const i = cur[0], j = cur[1];
-      let moved = false;
-      const order = dirs.slice();
-      for (let k = order.length - 1; k > 0; k--) {
-        const r = Math.floor(rnd() * (k + 1));
-        const tmp = order[k]; order[k] = order[r]; order[r] = tmp;
+    for (const p of path) carveDisc(p.x + 0.5, p.z + 0.5, p.r, 4);
+    carveDisc(end.x + 0.5, end.z + 0.5, 10.5, 6);
+
+    // сталактиты по краям
+    for (let i = 6; i < path.length - 8; i += 4) {
+      const p = path[i];
+      if (rnd() < 0.5) {
+        const a = rnd() * Math.PI * 2;
+        const rr = p.r + 1.2;
+        const x = Math.floor(p.x + Math.cos(a) * rr);
+        const z = Math.floor(p.z + Math.sin(a) * rr);
+        if (this.get(x, floorY, z) === 0) this.setRaw(x, floorY + 3, z, B.STONE);
       }
-      for (const d of order) {
-        const ni = i + d[0], nj = j + d[1];
-        if (ni < 0 || ni >= cells || nj < 0 || nj >= cells) continue;
-        if (seen[ni + nj * cells]) continue;
-        link(i, j, ni, nj);
-        seen[ni + nj * cells] = 1;
-        stack.push([ni, nj]);
-        moved = true;
-        break;
-      }
-      if (!moved) stack.pop();
-    }
-    // петли: убираем часть стен, чтобы лабиринт путал, но не был тупиковым
-    for (let k = 0; k < 14; k++) {
-      const i = Math.floor(rnd() * (cells - 1));
-      const j = Math.floor(rnd() * cells);
-      if (rnd() < 0.5) link(i, j, i + 1, j);
-      else link(i, j, i, Math.min(cells - 1, j + 1));
     }
 
-    // стартовая комната
-    const [sx, sz] = centerOf(0, 0);
-    carveRect(sx - 3, sz - 3, sx + 3, sz + 3);
-    // зал босса в дальнем углу
-    const [ex, ez] = centerOf(cells - 1, cells - 1);
-    const bx = ex - 3, bz = ez - 3;
-    carveRect(bx - 6, bz - 6, bx + 6, bz + 6);
-    // дорожка от лабиринта в зал
-    carveRect(bx - 1, bz + 6, bx + 1, ez + 6);
-    carveRect(ex - 6, ez - 6, ex - 6, ez + 6);
-
-    // факелы
-    const floors = Array.from(floorSet);
-    const pick = (list, n) => {
-      const out = [];
-      for (let k = 0; k < n && list.length; k++) {
-        out.push(list.splice(Math.floor(rnd() * list.length), 1)[0]);
-      }
-      return out;
-    };
-    this.lights.push({ x: sx + 0.5, y: floorY + 2, z: sz + 0.5, color: 0xffc070, intensity: 2.4 });
-    for (const key of pick(floors.slice(), 6)) {
-      const x = key % SX;
-      const z = Math.floor(key / SX);
-      this.lights.push({ x: x + 0.5, y: floorY + 2, z: z + 0.5, color: 0xffa050, intensity: 1.8 });
+    // свет по маршруту
+    for (const f of [0.05, 0.2, 0.36, 0.52, 0.68, 0.84]) {
+      const p = path[Math.floor(f * (path.length - 1))];
+      this.lights.push({ x: p.x + 0.5, y: floorY + 2.2, z: p.z + 0.5, color: 0xffb060, intensity: 2.2 });
     }
-    this.lights.push({ x: bx + 0.5, y: floorY + 2, z: bz + 0.5, color: 0x8ef0ff, intensity: 2.2 });
+    this.lights.push({ x: end.x + 0.5, y: floorY + 3, z: end.z + 0.5, color: 0x8ef0ff, intensity: 2.6 });
+    this.lights.push({ x: end.x - 6.5, y: floorY + 2.6, z: end.z + 4.5, color: 0xffb060, intensity: 2.4 });
 
-    // точки для прихвостней: подальше от входа и не в зале босса
+    // точки прихвостней вдоль пути
     const spawns = [];
-    for (const key of floors) {
-      const x = key % SX;
-      const z = Math.floor(key / SX);
-      if (Math.hypot(x - sx, z - sz) < 12) continue;
-      if (Math.hypot(x - bx, z - bz) < 9) continue;
-      spawns.push({ x: x + 0.5, y: floorY + 0.1, z: z + 0.5 });
+    for (let i = 6; i < path.length - 10; i += 5) {
+      const p = path[i];
+      if (Math.hypot(p.x - start.x, p.z - start.z) < 14) continue;
+      const a = rnd() * Math.PI * 2;
+      const rr = rnd() * 1.6;
+      spawns.push({ x: p.x + 0.5 + Math.cos(a) * rr, y: floorY + 0.1, z: p.z + 0.5 + Math.sin(a) * rr });
     }
-    for (let k = spawns.length - 1; k > 0; k--) {
-      const r = Math.floor(rnd() * (k + 1));
-      const tmp = spawns[k]; spawns[k] = spawns[r]; spawns[r] = tmp;
-    }
+
+    // награда за спиной босса
+    const bx = end.x, bz = end.z;
+    const dl = Math.hypot(dirX, dirZ) || 1;
+    const fx = dirX / dl, fz = dirZ / dl;
+    const sideX = -fz, sideZ = fx;
 
     this.spawnPoints = spawns.slice(0, 40);
     this.dungeon = {
-      start: { x: sx + 0.5, y: floorY + 0.2, z: sz + 0.5 },
+      path: path.map((p) => ({ x: p.x, z: p.z })),
+      start: { x: start.x + 0.5, y: floorY + 0.2, z: start.z + 0.5 },
       boss: { x: bx + 0.5, y: floorY + 0.1, z: bz + 0.5 },
-      portal: { x: bx + 0.5, y: floorY, z: bz - 5.5 },
-      spawns: spawns.slice(0, 22),
+      portal: { x: bx + fx * 7 + sideX * 4, y: floorY, z: bz + fz * 7 + sideZ * 4 },
+      spawns: spawns.slice(0, 24),
       chests: [
-        { x: bx - 3, y: floorY, z: bz - 3 },
-        { x: bx + 3, y: floorY, z: bz - 3 },
-        { x: bx, y: floorY, z: bz - 4 },
+        { x: Math.floor(bx + fx * 6 + sideX * -3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * -3) },
+        { x: Math.floor(bx + fx * 6 + sideX * 3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * 3) },
+        { x: Math.floor(bx + fx * 8), y: floorY, z: Math.floor(bz + fz * 8) },
       ],
     };
   }

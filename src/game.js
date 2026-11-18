@@ -228,7 +228,7 @@ export class Game {
     this.createWorldLights();
   }
 
-  createWorldLights() {
+  createWorldLights(maxLights = 4) {
     for (const wl of this.worldLights) {
       if (wl.light) this.scene.remove(wl.light);
       this.scene.remove(wl.sprite);
@@ -237,14 +237,14 @@ export class Game {
     this.worldLights = [];
     this.world.lights.forEach((data, index) => {
       let light = null;
-      if (index < 4) {
+      if (index < maxLights) {
         light = new THREE.PointLight(data.color, data.intensity * 4.5, 16, 2);
         light.position.set(data.x, data.y, data.z);
         this.scene.add(light);
       }
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         map: makeGlowTexture('255,230,180', '255,150,60'),
-        color: data.color, transparent: true, opacity: index < 4 ? 0.5 : 0.35,
+        color: data.color, transparent: true, opacity: index < maxLights ? 0.5 : 0.35,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       sprite.position.set(data.x, data.y, data.z);
@@ -2020,6 +2020,24 @@ export class Game {
     }
   }
 
+  bossVolley(boss) {
+    const cfg = boss.cfg;
+    const n = cfg.volleyCount ?? 14;
+    const from = boss.pos.clone();
+    from.y += cfg.height * 0.65;
+    const dmg = cfg.volleyDmg ?? Math.max(6, Math.round(cfg.dmg * 0.55));
+    const speed = cfg.volleySpeed ?? 15;
+    const color = cfg.volleyColor ?? cfg.eye ?? 0xff8a4a;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const dir = new THREE.Vector3(Math.cos(a), 0.07, Math.sin(a)).normalize();
+      this.spawnEnemyProjectile(from, dir, speed, dmg, true, color);
+    }
+    this.effects.flash(from.x, from.y, from.z, color, 2.4);
+    this.effects.ring(boss.pos.x, boss.pos.y + 0.3, boss.pos.z, color, 6, 0.8);
+    this.sound.bossRoar();
+  }
+
   updateWaves(dt) {
     this.waveActive = this.phase === 'wave';
     if (this.runMode === 'sandbox') {
@@ -2607,7 +2625,7 @@ export class Game {
       ...(base || {}),
       top: 0x0d070b, mid: 0x160b11, low: 0x241118, fog: 0x120a0e,
       light: 0xff9a6a, lightIntensity: 0.95,
-      hemiSky: 0x5a3d4a, hemiGround: 0x140c10, hemiIntensity: 0.9,
+      hemiSky: 0x5a3d4a, hemiGround: 0x140c10, hemiIntensity: 1.05,
       sun: false, moon: false, stars: false, meteors: false,
       cloud: 0x1a0e14, cloudEmissive: 0x0d070b, cloudOpacity: 0.2,
       zoneVolcano: 0x7a5a4a, zoneRad: 0x5a7a4a,
@@ -2675,7 +2693,7 @@ export class Game {
     this.world = world;
     this.dungeonActive = true;
     if (this.effects) this.effects.world = world;
-    this.createWorldLights();
+    this.createWorldLights(8);
     this.applyAtmosphere(this.dungeonTheme(save.theme), world.palette);
 
     const d = world.dungeon;
@@ -2863,17 +2881,22 @@ export class Game {
     if (this.dungeonExitMesh) return;
     const g = new THREE.Group();
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.85, 0.09, 8, 24),
-      new THREE.MeshBasicMaterial({ color: 0x8affd0, toneMapped: false })
+      new THREE.RingGeometry(0.6, 0.78, 26),
+      new THREE.MeshBasicMaterial({
+        color: 0x8affd0, transparent: true, opacity: 0.6, side: THREE.DoubleSide,
+        toneMapped: false, depthWrite: false,
+      })
     );
+    ring.rotation.x = -Math.PI / 2;
     g.add(ring);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.projectileTex, color: 0x8affd0, transparent: true, opacity: 0.5,
+      map: this.projectileTex, color: 0x8affd0, transparent: true, opacity: 0.35,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    glow.scale.setScalar(2.4);
+    glow.scale.setScalar(1.4);
+    glow.position.y = 0.45;
     g.add(glow);
-    g.position.set(p.x, p.y + 1.2, p.z);
+    g.position.set(p.x, p.y + 0.06, p.z);
     this.scene.add(g);
     this.dungeonExitMesh = g;
     this.dungeonExitPad = { pos: p.clone() };

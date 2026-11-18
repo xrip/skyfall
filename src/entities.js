@@ -500,6 +500,13 @@ export class Mob {
     this.rockCd = 3 + Math.random() * 2;
     this.enraged = false;
     this.slamCd = 5;
+    this.superCd = 5 + Math.random() * 3;
+    this.superWind = 0;
+    this.superKind = null;
+    this.superToggle = false;
+    this.rushTime = 0;
+    this.rushDir = new THREE.Vector3();
+    this.rushHitCd = 0;
     this.spawnedAdds = false;
     this.animTime = 0;
     this.lastHitBy = 'host';
@@ -809,6 +816,7 @@ export class Mob {
 
     // boss special
     if (this.cfg.boss) {
+      this.updateBossSpecials(dt, distH, target);
       const slamR = this.cfg.slamRadius ?? 9.5;
       this.slamCd -= dt;
       if (this.slamCd <= 0 && distH < slamR + 2) {
@@ -821,6 +829,22 @@ export class Mob {
           ? this.cfg.minions[Math.floor(Math.random() * this.cfg.minions.length)]
           : 'grunt';
         game.spawnAdds(this.pos, this.cfg.addsCount ?? 3, adds);
+      }
+      if (this.rushTime > 0) {
+        this.rushHitCd -= dt;
+        if (this.rushHitCd <= 0) {
+          for (const t of game.getMobTargets()) {
+            if (!t.alive) continue;
+            const dd = Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z);
+            if (dd < this.cfg.radius + 1.2 && Math.abs(t.pos.y - this.pos.y) < 3) {
+              game.damageTarget(t, Math.round(this.cfg.dmg * 1.2), this.pos, this.cfg.name + ' · РЫВОК');
+              this.rushHitCd = 1.2;
+              this.rushTime = 0;
+              game.effects.ring(this.pos.x, this.pos.y + 0.6, this.pos.z, 0xff8a4a, 5, 0.6);
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -844,8 +868,58 @@ export class Mob {
     return best;
   }
 
+  updateBossSpecials(dt, distH, target) {
+    const cfg = this.cfg;
+    const game = this.game;
+    if (this.superWind > 0) {
+      this.superWind -= dt;
+      if (this.superWind <= 0) {
+        if (this.superKind === 'rush' && target && target.alive) {
+          const dx = target.pos.x - this.pos.x;
+          const dz = target.pos.z - this.pos.z;
+          const d = Math.hypot(dx, dz) || 1;
+          this.rushDir.set(dx / d, 0, dz / d);
+          this.rushTime = 0.85;
+          this.rushHitCd = 0.15;
+          game.sound.bossRoar();
+        } else {
+          game.bossVolley(this);
+        }
+        this.superKind = null;
+      }
+      return;
+    }
+    if (this.rushTime > 0) return;
+    this.superCd -= dt;
+    if (this.superCd <= 0 && distH < 32) {
+      this.superToggle = !this.superToggle;
+      this.superKind = (!cfg.flying && this.superToggle) ? 'rush' : 'volley';
+      this.superWind = 0.85;
+      this.superCd = cfg.superCd ?? 10;
+      game.ui.feed(`<b>${cfg.name}</b> · ${this.superKind === 'volley' ? 'ЗАЛП' : 'РЫВОК'}`, true);
+      game.effects.flash(this.pos.x, this.pos.y + cfg.height * 0.7, this.pos.z, cfg.eye ?? 0xff8a4a, 1.8);
+      game.sound.tone(90, 0.3, { type: 'sawtooth', gain: 0.16, slide: 60 });
+    }
+  }
+
   updateWalker(dt, dirX, dirZ, distH, py, target) {
     const cfg = this.cfg;
+    if (this.rushTime > 0) {
+      this.rushTime -= dt;
+      const ahead = this.game.world.groundHeight(
+        this.pos.x + this.rushDir.x * 2.5,
+        this.pos.z + this.rushDir.z * 2.5
+      );
+      if (!this.airshipMob && ahead < 0) { this.rushTime = 0; return; }
+      const sp = cfg.speed * 3.8;
+      const k = 1 - Math.exp(-18 * dt);
+      this.vel.x += (this.rushDir.x * sp - this.vel.x) * k;
+      this.vel.z += (this.rushDir.z * sp - this.vel.z) * k;
+      this.movePhysics(dt);
+      this.aiTurn = 0;
+      this.aiAngle = null;
+      return;
+    }
     const speed = cfg.speed * (this.enraged ? 1.35 : 1);
     let mx = 0, mz = 0;
     const stopAt = cfg.stopRange ?? cfg.range * 0.86;
