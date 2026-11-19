@@ -156,8 +156,8 @@ export const RUN_MODES = {
     tagline: 'Три штурма и финальный Титан. Классическая высадка.',
   },
   endless: {
-    id: 'endless', name: 'БЕСКОНЕЧНЫЙ', short: '4 МИНУТЫ',
-    tagline: 'Развивайте остров: каждые 4 минуты приходит группа из 8–12 мобов.',
+    id: 'endless', name: 'БЕСКОНЕЧНЫЙ', short: '1 МИНУТА',
+    tagline: 'Развивайте остров: каждую минуту приходит группа из 8–12 мобов.',
   },
   sandbox: {
     id: 'sandbox', name: 'ПЕСОЧНИЦА', short: 'ВСЁ ОТКРЫТО',
@@ -166,8 +166,8 @@ export const RUN_MODES = {
 };
 
 export const ENDLESS = {
-  interval: 240,
-  firstDelay: 240,
+  interval: 60,
+  firstDelay: 60,
   minGroup: 8,
   maxGroup: 12,
 };
@@ -705,7 +705,7 @@ export const WAVES = [
   {
     title: 'ВОЛНА 1 · РАЗВЕДКА',
     sub: 'Громилы и скелеты идут с края острова',
-    prep: 46, between: 22,
+    prep: 40, between: 40,
     groups: [
       { type: 'grunt', count: 10, gap: 1.25 },
       { type: 'skeleton', count: 4, gap: 3.2, delay: 7 },
@@ -714,7 +714,7 @@ export const WAVES = [
   {
     title: 'ВОЛНА 2 · НАЖИМ',
     sub: 'Осы, демоны и горгульи. Не стойте на открытом',
-    prep: 22, between: 24,
+    prep: 40, between: 40,
     groups: [
       { type: 'grunt', count: 12, gap: 1.15 },
       { type: 'flyer', count: 4, gap: 2.4, delay: 4 },
@@ -725,7 +725,7 @@ export const WAVES = [
   {
     title: 'ВОЛНА 3 · ФИНАЛ',
     sub: 'Свита босса и сам хозяин острова',
-    prep: 24, between: 0, bossWave: true,
+    prep: 40, between: 0, bossWave: true,
     groups: [],
   },
 ];

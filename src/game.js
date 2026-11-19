@@ -638,7 +638,7 @@ export class Game {
     this.ui.toggleHelp(false);
     const modeCfg = RUN_MODES[this.runMode];
     const bannerSub = this.runMode === 'endless'
-      ? 'Стройте остров · атака каждые 4 минуты'
+      ? 'Стройте остров · атака каждую минуту'
       : this.runMode === 'sandbox'
         ? 'Все оружие · бесконечные блоки и патроны'
         : 'Соберите лут · постройте укрепления';
@@ -717,7 +717,7 @@ export class Game {
       const first = ['grunt', 'grunt', 'skeleton', 'flyer', 'demon'];
       for (let i = 0; i < 4; i++) this.spawnMob(first[i], this.sandboxSpawnPoint(18, 30));
     } else if (this.runMode === 'endless') {
-      this.ui.setWave('АТАКА 1', 'ПОДГОТОВКА', 'Стройте остров · первая атака через 4 минуты', fmt(this.phaseTime), false);
+      this.ui.setWave('АТАКА 1', 'ПОДГОТОВКА', 'Стройте остров · первая атака через 1 минуту', fmt(this.phaseTime), false);
     }
     this.ui.feedEl.innerHTML = '';
     this.compass = '';
@@ -830,7 +830,7 @@ export class Game {
       this.phase = 'endlessPrep';
       this.phaseTime = ENDLESS.interval;
       this.sound.waveClear();
-      this.ui.banner('АТАКА ОТБИТА', 'ПЕРЕДЫШКА', 'Следующая группа через 4 минуты', false, 3000);
+      this.ui.banner('АТАКА ОТБИТА', 'ПЕРЕДЫШКА', 'Следующая группа через 1 минуту', false, 3000);
       this.player.heal(15);
       this.player.addAmmoAll(0.35);
       this.ui.feed('<b>+15 HP</b> · передышка');
@@ -1824,7 +1824,7 @@ export class Game {
     } else if (msg.kind === 'clear') {
       this.sound.waveClear();
       if (msg.mode === 'endless') {
-        this.ui.banner('АТАКА ОТБИТА', 'ПЕРЕДЫШКА', 'Следующая группа через 4 минуты', false, 3000);
+        this.ui.banner('АТАКА ОТБИТА', 'ПЕРЕДЫШКА', 'Следующая группа через 1 минуту', false, 3000);
       } else {
         this.ui.banner('ВОЛНА ОТБИТА', 'ПЕРЕДЫШКА', 'Пополните боезапас и заделайте бреши', false, 3000);
       }
