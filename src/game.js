@@ -18,6 +18,28 @@ import { loadTurn, saveTurn } from './rtc.js';
 
 const $ = (id) => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
+
+// У каждого босса свой набор супер-атак.
+const BOSS_SUPERS = {
+  colossus: ['line', 'rush', 'volley'],
+  reaper: ['summon', 'volley', 'line'],
+  hive: ['summon', 'rain', 'volley'],
+  magma: ['eruption', 'rush', 'volley'],
+  warden: ['rain', 'beam', 'volley'],
+  shepherd: ['beam', 'summon', 'volley'],
+  storm: ['rain', 'beam', 'rush'],
+  worm: ['eruption', 'line', 'rush'],
+};
+const SUPER_NAMES = {
+  volley: 'ЗАЛП',
+  rush: 'РЫВОК',
+  line: 'ЛИНИЯ',
+  rain: 'ДОЖДЬ',
+  summon: 'ПРИЗЫВ',
+  eruption: 'ИЗВЕРЖЕНИЕ',
+  beam: 'ЛУЧ',
+};
+
 const fmt = (s) => {
   s = Math.max(0, Math.ceil(s));
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
@@ -1836,6 +1858,17 @@ export class Game {
     } else if (msg.kind === 'boss') {
       this.sound.bossRoar();
       this.ui.banner('УГРОЗА', msg.name || 'БОСС', msg.sub || 'Земля дрожит. Не стойте на месте.', true, 4200);
+    } else if (msg.kind === 'bossSuper') {
+      this.ui.feed(`<b>БОСС</b> · ${this.bossSuperName(msg.name)}`, true);
+      this.effects.flash(msg.x, msg.y + 1.5, msg.z, 0xff8a4a, 1.2);
+      if (msg.name === 'line' && msg.dx != null) {
+        for (let i = 0; i < 10; i++) {
+          const d = i * 1.7;
+          this.effects.spawn(msg.x + msg.dx * d, msg.y + 0.5, msg.z + msg.dz * d, 0xff8a4a, 4, {
+            speed: 1.2, up: 2, size: 0.14, life: 0.7, solid: false,
+          });
+        }
+      }
     } else if (msg.kind === 'settings') {
       if (RUN_MODES[msg.mode]) this.selectedMode = msg.mode;
       if (DIFFICULTY_BY_ID[msg.difficulty]) this.selectedDifficulty = msg.difficulty;
@@ -2100,6 +2133,119 @@ export class Game {
         this.hurtRemote(dmg, boss.pos, 'УДАРНАЯ ВОЛНА');
       }
     }
+  }
+
+  bossSuperList(boss) {
+    return BOSS_SUPERS[boss.type] || ['volley', 'rush'];
+  }
+
+  bossSuperName(kind) {
+    return SUPER_NAMES[kind] || 'АТАКА';
+  }
+
+  bossSuper(boss, kind) {
+    switch (kind) {
+      case 'line': this.bossLine(boss); break;
+      case 'rain': this.bossRain(boss); break;
+      case 'summon': this.bossSummon(boss); break;
+      case 'eruption': this.bossEruption(boss); break;
+      case 'beam': this.bossBeam(boss); break;
+      default: this.bossVolley(boss);
+    }
+    if (this.netRole === 'host' && this.peerJoined) {
+      this.net.send({
+        t: 'event', kind: 'bossSuper', name: kind,
+        x: +boss.pos.x.toFixed(2), y: +boss.pos.y.toFixed(2), z: +boss.pos.z.toFixed(2),
+        dx: +Math.sin(boss.yaw).toFixed(3), dz: +Math.cos(boss.yaw).toFixed(3),
+      });
+    }
+  }
+
+  bossLine(boss) {
+    const cfg = boss.cfg;
+    const color = cfg.eye ?? 0xff8a4a;
+    const dx = Math.sin(boss.yaw), dz = Math.cos(boss.yaw);
+    const from = boss.pos.clone();
+    const len = cfg.lineLen ?? 18;
+    for (const t of this.getMobTargets()) {
+      if (!t.alive) continue;
+      const rx = t.pos.x - from.x, rz = t.pos.z - from.z;
+      const along = rx * dx + rz * dz;
+      const side = Math.abs(-rx * dz + rz * dx);
+      if (along > -1 && along < len && side < 2.6 && Math.abs(t.pos.y - from.y) < 3) {
+        this.damageTarget(t, Math.round(cfg.dmg * 0.95), from, cfg.name + ' · ЛИНИЯ');
+      }
+    }
+    for (let i = 0; i < 12; i++) {
+      const d = (i / 11) * len;
+      this.effects.spawn(from.x + dx * d, from.y + 0.5, from.z + dz * d, color, 5, {
+        speed: 1.2, up: 2.2, size: 0.16, life: 0.7, solid: false,
+      });
+    }
+    this.effects.ring(from.x + dx * len * 0.5, from.y + 0.1, from.z + dz * len * 0.5, color, 4, 0.5);
+    this.sound.bossRoar();
+  }
+
+  bossRain(boss) {
+    const cfg = boss.cfg;
+    const targets = this.getMobTargets().filter((t) => t.alive);
+    const t = targets[0] || { pos: this.player.pos };
+    const n = cfg.rainCount ?? 10;
+    const color = cfg.eye ?? 0x9fe0ff;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * 6.5;
+      const x = t.pos.x + Math.cos(a) * r;
+      const z = t.pos.z + Math.sin(a) * r;
+      const gy = this.world.groundHeight(x, z);
+      const from = new THREE.Vector3(x, (gy > 0 ? gy : t.pos.y) + 16 + Math.random() * 4, z);
+      this.spawnEnemyProjectile(from, new THREE.Vector3(0, -1, 0), cfg.rainSpeed ?? 26, cfg.rainDmg ?? Math.round(cfg.dmg * 0.45), true, color);
+    }
+    this.effects.flash(t.pos.x, t.pos.y + 3, t.pos.z, color, 2.0);
+    this.sound.bossRoar();
+  }
+
+  bossSummon(boss) {
+    const cfg = boss.cfg;
+    const mins = cfg.minions || ['grunt'];
+    this.spawnAdds(boss.pos, 4, mins[Math.floor(Math.random() * mins.length)]);
+    this.effects.ring(boss.pos.x, boss.pos.y + 0.2, boss.pos.z, cfg.eye ?? 0xff8a4a, 6, 0.8);
+    this.sound.bossRoar();
+  }
+
+  bossEruption(boss) {
+    const cfg = boss.cfg;
+    const targets = this.getMobTargets().filter((t) => t.alive);
+    const t = targets[0] || { pos: this.player.pos };
+    const n = cfg.eruptCount ?? 8;
+    const color = cfg.eye ?? 0xff7a2a;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 2 + Math.random() * 8;
+      const x = t.pos.x + Math.cos(a) * r;
+      const z = t.pos.z + Math.sin(a) * r;
+      const gy = this.world.groundHeight(x, z);
+      const from = new THREE.Vector3(x, (gy > 0 ? gy : t.pos.y) - 1.4, z);
+      const dir = new THREE.Vector3(t.pos.x - x, t.pos.y + 1.2 - from.y, t.pos.z - z).normalize();
+      this.spawnEnemyProjectile(from, dir, cfg.eruptSpeed ?? 18, cfg.eruptDmg ?? Math.round(cfg.dmg * 0.5), true, color);
+      this.effects.spawn(x, from.y + 0.6, z, color, 5, { speed: 1.4, up: 3.2, size: 0.14, life: 0.6, solid: false });
+    }
+    this.sound.bossRoar();
+  }
+
+  bossBeam(boss) {
+    const cfg = boss.cfg;
+    const from = boss.pos.clone();
+    from.y += cfg.height * 0.62;
+    const targets = this.getMobTargets().filter((t) => t.alive);
+    const t = targets[0] || { pos: this.player.pos };
+    const to = t.pos.clone();
+    to.y += 1.1;
+    const dir = to.sub(from).normalize();
+    const color = cfg.eye ?? 0x9fe0ff;
+    this.spawnEnemyProjectile(from, dir, cfg.beamSpeed ?? 44, cfg.beamDmg ?? Math.round(cfg.dmg * 1.1), true, color);
+    this.effects.flash(from.x, from.y, from.z, color, 1.6);
+    this.sound.enemyShot();
   }
 
   bossVolley(boss) {
@@ -2603,8 +2749,11 @@ export class Game {
 
     const starterNeed = chest.data.starter && !player.owned.smg && !player.owned.shotgun && !player.owned.rifle;
     let weaponKey = null;
-    if (starterNeed) weaponKey = 'smg';
-    else if (Math.random() < t.weapon[0]) {
+    if (starterNeed) {
+      // на спавне всегда разное оружие, а не один и тот же ПП
+      const pool = ['smg', 'shotgun', 'rifle', 'ak', 'axe', 'bat', 'sword'];
+      weaponKey = pool[Math.floor(Math.random() * pool.length)];
+    } else if (Math.random() < t.weapon[0]) {
       const list = t.weapon[1];
       weaponKey = list[Math.floor(Math.random() * list.length)];
     }
@@ -2639,6 +2788,26 @@ export class Game {
       const pid = partIds[Math.floor(Math.random() * partIds.length)];
       player.addWeaponPart(pid, tier === 3 ? 2 : 1);
       lines.push(`<b>+ ЧАСТЬ: ${WEAPON_PARTS[pid].name}</b>${tier === 3 ? ' ×2' : ''}`);
+    }
+
+    // случайный бонус: два сундука подряд не похожи
+    if (Math.random() < 0.55) {
+      const roll = Math.floor(Math.random() * 4);
+      if (roll === 0) {
+        const c = 12 + Math.floor(Math.random() * 30);
+        player.addCoins(c);
+        lines.push(`<b>+${c} монет</b>`);
+      } else if (roll === 1) {
+        player.addAmmoAll(0.45);
+        lines.push('<b>+ Боезапас</b>');
+      } else if (roll === 2) {
+        player.addMedkits(1);
+        lines.push('<b>+1 аптечка</b>');
+      } else {
+        const n = 8 + Math.floor(Math.random() * 20);
+        player.addBlocks(B.STONE, n);
+        lines.push(`<b>+${n} камня</b>`);
+      }
     }
 
     for (const line of lines) this.ui.feed(line);
@@ -2703,6 +2872,7 @@ export class Game {
   }
 
   dungeonTheme(base) {
+    const atm = (this.world && this.world.dungeon && this.world.dungeon.atmosphere) || {};
     return {
       ...(base || {}),
       top: 0x0d070b, mid: 0x160b11, low: 0x241118, fog: 0x120a0e,
@@ -2711,6 +2881,7 @@ export class Game {
       sun: false, moon: false, stars: false, meteors: false,
       cloud: 0x1a0e14, cloudEmissive: 0x0d070b, cloudOpacity: 0.2,
       zoneVolcano: 0x7a5a4a, zoneRad: 0x5a7a4a,
+      ...atm,
     };
   }
 
@@ -2769,7 +2940,7 @@ export class Game {
     this.effects.clear();
 
     const world = new World(runSeed);
-    world.generateDungeon(runSeed, this.atlas);
+    world.generateDungeon(runSeed, this.atlas, this.dungeonBossKey);
     world.initRenderer(this.scene);
     world.group.visible = true;
     this.world = world;

@@ -504,6 +504,7 @@ export class Mob {
     this.superWind = 0;
     this.superKind = null;
     this.superToggle = false;
+    this.superStep = -1;
     this.rushTime = 0;
     this.rushDir = new THREE.Vector3();
     this.rushHitCd = 0;
@@ -883,7 +884,7 @@ export class Mob {
           this.rushHitCd = 0.15;
           game.sound.bossRoar();
         } else {
-          game.bossVolley(this);
+          game.bossSuper(this, this.superKind);
         }
         this.superKind = null;
       }
@@ -892,11 +893,13 @@ export class Mob {
     if (this.rushTime > 0) return;
     this.superCd -= dt;
     if (this.superCd <= 0 && distH < 32) {
-      this.superToggle = !this.superToggle;
-      this.superKind = (!cfg.flying && this.superToggle) ? 'rush' : 'volley';
+      const list = game.bossSuperList(this);
+      this.superStep = ((this.superStep ?? -1) + 1) % list.length;
+      this.superKind = list[this.superStep];
+      if (this.superKind === 'rush' && cfg.flying) this.superKind = 'volley';
       this.superWind = 0.85;
       this.superCd = cfg.superCd ?? 10;
-      game.ui.feed(`<b>${cfg.name}</b> · ${this.superKind === 'volley' ? 'ЗАЛП' : 'РЫВОК'}`, true);
+      game.ui.feed(`<b>${cfg.name}</b> · ${game.bossSuperName(this.superKind)}`, true);
       game.effects.flash(this.pos.x, this.pos.y + cfg.height * 0.7, this.pos.z, cfg.eye ?? 0xff8a4a, 1.8);
       game.sound.tone(90, 0.3, { type: 'sawtooth', gain: 0.16, slide: 60 });
     }

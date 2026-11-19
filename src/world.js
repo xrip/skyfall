@@ -49,6 +49,50 @@ const FACES = [
 ];
 const AO_BRIGHT = [0.58, 0.73, 0.87, 1.0];
 
+// Стили пещеры: у каждого босса свои блоки, свет и форма маршрута.
+const CAVE_STYLES = {
+  colossus: {
+    floor: B.STONE, wall: B.STONE, ceil: B.STONE, accents: [B.BRICK, B.RUST],
+    light: 0xffb060, fog: 0x2a1a12, hemiSky: 0x6a4a3a, hemiGround: 0x1a0f0a, hemi: 1.05,
+    legs: [[30, 0], [0, 18], [24, 0], [0, -14], [20, 0], [0, 18], [26, 0]],
+  },
+  reaper: {
+    floor: B.STONE, wall: B.STONE, ceil: B.STONE, accents: [B.OBSIDIAN, B.RUST],
+    light: 0x9dffc4, fog: 0x120a1a, hemiSky: 0x4a3a5a, hemiGround: 0x0e0812, hemi: 0.95,
+    legs: [[18, 0], [0, 20], [14, 0], [0, -16], [20, 0], [0, 14], [28, 0]],
+  },
+  hive: {
+    floor: B.DIRT, wall: B.BRICK, ceil: B.BRICK, accents: [B.HAY, B.PLANKS],
+    light: 0xffe14a, fog: 0x241c08, hemiSky: 0x6a5a2a, hemiGround: 0x1a1408, hemi: 1.0,
+    legs: [[24, 0], [0, 12], [18, 0], [0, 20], [16, 0], [0, -10], [30, 0]],
+  },
+  magma: {
+    floor: B.BASALT, wall: B.BASALT, ceil: B.OBSIDIAN, accents: [B.MAGMA, B.OBSIDIAN],
+    light: 0xff7a2a, fog: 0x2a0c06, hemiSky: 0x7a3a2a, hemiGround: 0x200806, hemi: 0.95,
+    legs: [[34, 0], [0, 14], [20, 0], [0, -18], [26, 0], [0, 16], [18, 0]],
+  },
+  warden: {
+    floor: B.OBSIDIAN, wall: B.STONE, ceil: B.OBSIDIAN, accents: [B.OBSIDIAN, B.METAL],
+    light: 0xa8f6ff, fog: 0x0a1a22, hemiSky: 0x3a5a6a, hemiGround: 0x08121a, hemi: 1.0,
+    legs: [[20, 0], [0, 16], [26, 0], [0, -10], [22, 0], [0, 20], [20, 0]],
+  },
+  shepherd: {
+    floor: B.INF_DIRT, wall: B.INF_STONE, ceil: B.INF_STONE, accents: [B.INF_BRICK, B.INF_METAL],
+    light: 0xc6ff6a, fog: 0x10200c, hemiSky: 0x4a6a3a, hemiGround: 0x0e1a0a, hemi: 1.05,
+    legs: [[28, 0], [0, 22], [14, 0], [0, -12], [26, 0], [0, 10], [22, 0]],
+  },
+  storm: {
+    floor: B.METAL, wall: B.STONE, ceil: B.METAL, accents: [B.METAL, B.RUST],
+    light: 0x9fe0ff, fog: 0x0a1422, hemiSky: 0x3a5a7a, hemiGround: 0x081018, hemi: 1.0,
+    legs: [[24, 0], [0, 10], [28, 0], [0, -18], [18, 0], [0, 22], [20, 0]],
+  },
+  worm: {
+    floor: B.SAND, wall: B.SAND, ceil: B.STONE, accents: [B.BASALT, B.SAND],
+    light: 0xffb144, fog: 0x2a2010, hemiSky: 0x6a5a3a, hemiGround: 0x1a1408, hemi: 1.1,
+    legs: [[36, 0], [0, 16], [16, 0], [0, -12], [30, 0], [0, 14], [18, 0]],
+  },
+};
+
 export class World {
   constructor(seed = 7331) {
     this.seed = seed;
@@ -1308,8 +1352,10 @@ export class World {
   }
 
   /* ---------------- meshing ---------------- */
+
+
   // Отдельный мир-подземелье: длинная извилистая пещера с одним маршрутом.
-  generateDungeon(seed, atlas) {
+  generateDungeon(seed, atlas, bossKey = 'colossus') {
     this.seed = seed;
     this.atlas = atlas;
     this.palette = WORLD_PALETTES[0];
@@ -1326,9 +1372,10 @@ export class World {
     const cx = ISLAND_CENTER.x, cz = ISLAND_CENTER.z;
     const floorY = 30;
     const start = { x: cx - 42, z: cz - 42 };
+    const style = CAVE_STYLES[bossKey] || CAVE_STYLES.colossus;
 
     // один длинный маршрут: несколько поворотов, без развилок
-    const legs = [[30, 0], [0, 18], [24, 0], [0, -14], [20, 0], [0, 18], [26, 0]];
+    const legs = style.legs;
     const path = [{ x: start.x, z: start.z, r: 5 }];
     let px = start.x, pz = start.z;
     let dirX = 1, dirZ = 0;
@@ -1354,7 +1401,7 @@ export class World {
 
     for (let x = minX; x <= maxX; x++) {
       for (let z = minZ; z <= maxZ; z++) {
-        for (let y = floorY; y <= floorY + 9; y++) this.setRaw(x, y, z, B.STONE);
+        for (let y = floorY; y <= floorY + 9; y++) this.setRaw(x, y, z, style.wall);
       }
     }
 
@@ -1368,8 +1415,8 @@ export class World {
           const x = Math.floor(cx0 + dx), z = Math.floor(cz0 + dz);
           if (x < 2 || z < 2 || x >= SX - 2 || z >= SZ - 2) continue;
           for (let y = floorY; y < floorY + h; y++) this.setRaw(x, y, z, 0);
-          this.setRaw(x, floorY - 1, z, rnd() < 0.12 ? B.RUST : B.STONE);
-          this.setRaw(x, floorY + h, z, B.STONE);
+          this.setRaw(x, floorY - 1, z, rnd() < 0.12 ? style.accents[0] : style.floor);
+          this.setRaw(x, floorY + h, z, style.ceil);
           this.heights[x + z * SX] = floorY - 1;
         }
       }
@@ -1386,21 +1433,37 @@ export class World {
         const rr = p.r + 1.2;
         const x = Math.floor(p.x + Math.cos(a) * rr);
         const z = Math.floor(p.z + Math.sin(a) * rr);
-        if (this.get(x, floorY, z) === 0) this.setRaw(x, floorY + 3, z, B.STONE);
+        if (this.get(x, floorY, z) === 0) this.setRaw(x, floorY + 3, z, style.ceil);
+      }
+    }
+
+    // акцентные жилы в стенах — у каждого босса свой камень
+    for (let i = 10; i < path.length - 10; i += 9) {
+      const p = path[i];
+      const a0 = rnd() * Math.PI * 2;
+      for (const a of [a0, a0 + Math.PI]) {
+        const rr = p.r + 0.7;
+        const x = Math.floor(p.x + Math.cos(a) * rr);
+        const z = Math.floor(p.z + Math.sin(a) * rr);
+        const id = style.accents[Math.floor(rnd() * style.accents.length)];
+        for (let y = floorY; y < floorY + 3; y++) {
+          if (this.isSolid(x, y, z)) this.setRaw(x, y, z, id);
+        }
       }
     }
 
     // свет по маршруту
-    for (const f of [0.05, 0.2, 0.36, 0.52, 0.68, 0.84]) {
+    this.lights.push({ x: start.x + 0.5, y: floorY + 2.2, z: start.z + 0.5, color: style.light, intensity: 2.4 });
+    for (const f of [0.18, 0.34, 0.5, 0.66, 0.82]) {
       const p = path[Math.floor(f * (path.length - 1))];
-      this.lights.push({ x: p.x + 0.5, y: floorY + 2.2, z: p.z + 0.5, color: 0xffb060, intensity: 2.2 });
+      this.lights.push({ x: p.x + 0.5, y: floorY + 2.2, z: p.z + 0.5, color: style.light, intensity: 2.2 });
     }
-    this.lights.push({ x: end.x + 0.5, y: floorY + 3, z: end.z + 0.5, color: 0x8ef0ff, intensity: 2.6 });
-    this.lights.push({ x: end.x - 6.5, y: floorY + 2.6, z: end.z + 4.5, color: 0xffb060, intensity: 2.4 });
+    this.lights.push({ x: end.x + 0.5, y: floorY + 3, z: end.z + 0.5, color: style.light, intensity: 2.8 });
+    this.lights.push({ x: end.x - 6.5, y: floorY + 2.6, z: end.z + 4.5, color: style.light, intensity: 2.2 });
 
-    // точки прихвостней вдоль пути
+    // точки прихвостней вдоль пути (вдвое больше)
     const spawns = [];
-    for (let i = 6; i < path.length - 10; i += 5) {
+    for (let i = 6; i < path.length - 10; i += 2) {
       const p = path[i];
       if (Math.hypot(p.x - start.x, p.z - start.z) < 14) continue;
       const a = rnd() * Math.PI * 2;
@@ -1414,13 +1477,21 @@ export class World {
     const fx = dirX / dl, fz = dirZ / dl;
     const sideX = -fz, sideZ = fx;
 
-    this.spawnPoints = spawns.slice(0, 40);
+    this.spawnPoints = spawns.slice(0, 44);
     this.dungeon = {
       path: path.map((p) => ({ x: p.x, z: p.z })),
+      atmosphere: {
+        fog: style.fog,
+        hemiSky: style.hemiSky,
+        hemiGround: style.hemiGround,
+        hemiIntensity: style.hemi,
+        light: style.light,
+        lightIntensity: 0.95,
+      },
       start: { x: start.x + 0.5, y: floorY + 0.2, z: start.z + 0.5 },
       boss: { x: bx + 0.5, y: floorY + 0.1, z: bz + 0.5 },
       portal: { x: bx + fx * 7 + sideX * 4, y: floorY, z: bz + fz * 7 + sideZ * 4 },
-      spawns: spawns.slice(0, 24),
+      spawns: spawns.slice(0, 44),
       chests: [
         { x: Math.floor(bx + fx * 6 + sideX * -3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * -3) },
         { x: Math.floor(bx + fx * 6 + sideX * 3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * 3) },
