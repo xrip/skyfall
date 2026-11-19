@@ -73,6 +73,7 @@
     <div id="loot-feed"></div>
     <div id="prompt" class="hidden"><b>E</b> <span>Открыть сундук</span></div>
     <div id="hints">
+      <span id="voice-hint" hidden><b>V</b> <span id="voice-hint-text">говорить</span></span>
       <span><b>WASD</b> движение</span>
       <span><b>ЛКМ</b> огонь / добыча</span>
       <span><b>ПКМ</b> блок</span>
@@ -115,6 +116,7 @@
       <div><b>7 / 8</b><span>Оружие</span></div>
       <div><b>9 + ЛКМ</b><span>Использовать аптечку</span></div>
       <div><b>Q</b><span>Сменить оружие</span></div>
+      <div><b>V</b><span>Голосовой чат в кооперативе</span></div>
       <div><b>ESC</b><span>Пауза</span></div>
     </div>
     <div class="help-tip">Кирка ломает любые блоки. Добыча и лут попадают в инвентарь — откройте его клавишей I и назначьте блоки в слоты 2–6, а оружие — в 7 или 8. Сундуки подсвечены золотыми лучами. ENTER во время подготовки запускает волну досрочно. В вулканической зоне не стойте на магме, а в радиационной надевайте сет химзащиты.</div>
@@ -319,6 +321,8 @@
         Соединение <b>прямое (P2P, WebRTC)</b>: Worker нужен только чтобы обменяться
         кодами и отпустить игроков. Друг открывает этот же адрес и вводит код.
       </div>
+      <button id="btn-room-mic" class="btn ghost small" aria-pressed="false">ВКЛЮЧИТЬ МИКРОФОН</button>
+      <div id="voice-status" class="coop-status" role="status">Голосовой чат: удерживайте V, чтобы говорить.</div>
       <details class="coop-adv">
         <summary>Свой TURN-сервер — необязательно</summary>
         <p>На игровом сайте и GitHub Pages TURN подключается автоматически. Оставьте поля пустыми. Они нужны только для другого TURN-сервера.</p>
@@ -343,6 +347,7 @@
       <p class="pause-sub">Остров не убежит. Наверное.</p>
       <div class="pause-buttons">
         <button id="btn-resume" class="btn primary small">ПРОДОЛЖИТЬ</button>
+        <button id="btn-pause-mic" class="btn ghost small" aria-pressed="false" hidden>ВКЛЮЧИТЬ МИКРОФОН</button>
         <button id="btn-restart" class="btn ghost small">НАЧАТЬ ЗАНОВО</button>
         <button id="btn-menu" class="btn ghost small">В МЕНЮ</button>
       </div>

@@ -945,6 +945,7 @@ export class Game {
 
   pause() {
     if (this.state !== 'playing') return;
+    this.updateRoomMicButton();
     this.state = 'paused';
     this.player.primaryDown = false;
     this.player.secondaryDown = false;
@@ -1172,7 +1173,17 @@ export class Game {
   }
 
   /* ================= co-op lobby & networking ================= */
+  updateRoomMicButton() {
+    const enabled = !!this.net.voice.microphone;
+    for (const id of ['btn-room-mic', 'btn-pause-mic']) {
+      const button = $(id);
+      button.setAttribute('aria-pressed', String(enabled));
+      button.textContent = enabled ? 'ВЫКЛЮЧИТЬ МИКРОФОН' : 'ВКЛЮЧИТЬ МИКРОФОН';
+    }
+  }
+
   openCoop() {
+    this.updateRoomMicButton();
     $('coop').classList.remove('hidden');
     $('join-status').textContent = '';
     $('join-status').className = 'coop-status';
@@ -3989,6 +4000,42 @@ export class Game {
     $('btn-coop-close').addEventListener('click', () => this.closeCoop());
     $('btn-turn-save').addEventListener('click', () => this.saveTurnSettings());
     $('btn-turn-clear').addEventListener('click', () => this.clearTurnSettings());
+    const voice = this.net.voice;
+    let talking = false;
+    let micError = '';
+    const toggleMicrophone = async () => {
+      if (voice.microphone || voice.pending) {
+        voice.disableMicrophone();
+        micError = '';
+        this.updateRoomMicButton();
+        return;
+      }
+      try {
+        await voice.enableMicrophone();
+        micError = '';
+        $('voice-status').textContent = 'Голосовой чат: удерживайте V, чтобы говорить.';
+      } catch {
+        micError = 'нет доступа к микрофону';
+        $('voice-status').textContent = 'Нет доступа к микрофону. Кооператив доступен без него.';
+      }
+      this.updateRoomMicButton();
+    };
+    $('btn-room-mic').addEventListener('click', toggleMicrophone);
+    $('btn-pause-mic').addEventListener('click', toggleMicrophone);
+    const stopTalking = () => { talking = false; voice.talk(false); };
+    const hint = $('voice-hint');
+    const pauseMic = $('btn-pause-mic');
+    const hintText = $('voice-hint-text');
+    this.updateVoiceHud = () => {
+      const available = !!this.netRole && this.net.transport === 'p2p';
+      if (hint.hidden === available) hint.hidden = !available;
+      if (pauseMic.hidden === available) pauseMic.hidden = !available;
+      if (!available) return;
+      const text = voice.pending ? 'доступ к микрофону…' : micError || (
+        voice.microphone ? (talking ? 'микрофон включён' : 'удерживайте, чтобы говорить')
+        : 'включить микрофон');
+      if (hintText.textContent !== text) hintText.textContent = text;
+    };
     $('room-input').addEventListener('keydown', (e) => {
       if (e.code === 'Enter') this.joinRoom();
       e.stopPropagation();
@@ -4017,12 +4064,26 @@ export class Game {
     $('alien').addEventListener('click', (e) => this.onAlienClick(e));
     $('alien-close').addEventListener('click', () => this.closeAlienShop());
 
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyV' && !e.repeat && this.runActive && this.netRole && this.net.transport === 'p2p'
+          && !e.target.closest?.('input, textarea, [contenteditable]')) {
+        talking = true;
+        if (voice.microphone) voice.talk(true);
+        else if (!voice.pending) {
+          toggleMicrophone().then(() => {
+            if (talking && document.hasFocus()) voice.talk(true);
+          });
+        }
+      }
+      this.onKeyDown(e);
+    });
     window.addEventListener('keyup', (e) => {
       this.input.keys[e.code] = false;
+      if (e.code === 'KeyV') stopTalking();
     });
     window.addEventListener('blur', () => {
       this.input.keys = {};
+      stopTalking();
     });
 
     document.addEventListener('pointerlockchange', () => {
@@ -4120,6 +4181,7 @@ export class Game {
   /* ================= loop ================= */
   loop(now) {
     requestAnimationFrame(this.loop);
+    this.updateVoiceHud();
     let rawDt = (now - this.last) / 1000;
     this.last = now;
     if (!isFinite(rawDt) || rawDt < 0) rawDt = 0.016;

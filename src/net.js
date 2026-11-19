@@ -7,6 +7,7 @@
 // WebSocket-релей оставлен как резервный путь: он включается, если сигнальный
 // API недоступен или если адрес открыт с ?net=ws.
 import { API_ORIGIN, RtcLink } from './rtc.js';
+import { RoomVoice } from './voice.js';
 
 const CHUNK = 48000;
 const SERVER_UNAVAILABLE = API_ORIGIN
@@ -25,6 +26,7 @@ function wantsWs() {
 export class Net {
   constructor(game) {
     this.game = game;
+    this.voice = new RoomVoice();
     this.ws = null;
     this.link = null;
     this.role = null;
@@ -50,6 +52,7 @@ export class Net {
   hostRoom() {
     this._pending = { kind: 'host' };
     if (wantsWs()) { this.hostWs(); return; }
+    this.voice.start();
     this.transport = 'p2p';
     this.attempting = true;
     this.link = new RtcLink(this.handlers());
@@ -60,6 +63,7 @@ export class Net {
     const clean = String(code || '').trim().toUpperCase();
     this._pending = { kind: 'join', code: clean };
     if (wantsWs()) { this.joinWs(clean); return; }
+    this.voice.start();
     this.transport = 'p2p';
     this.attempting = true;
     this.link = new RtcLink(this.handlers());
@@ -68,6 +72,7 @@ export class Net {
 
   handlers() {
     return {
+      voice: this.voice,
       onHosted: (code) => {
         this.role = 'host';
         this.code = code;
@@ -295,6 +300,7 @@ export class Net {
       this.link.close();
       this.link = null;
     }
+    this.voice.close();
     this.pendingHost = false;
     this.pendingJoin = null;
     this._pending = null;

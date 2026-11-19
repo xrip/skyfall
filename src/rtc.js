@@ -213,6 +213,7 @@ export class RtcLink {
     for (const id of ids) {
       if (this.peers.has(id)) continue;
       const peer = new RtcLink({
+        voice: this.h.voice,
         onOpen: () => this.h.onOpen?.(id),
         onPeerLost: () => this.h.onPeerLost?.(id),
         onMessage: (text) => this.h.onMessage?.(text, id),
@@ -265,6 +266,7 @@ export class RtcLink {
     this.watch(pc);
 
     try {
+      await this.attachVoice(pc, true);
       await pc.setLocalDescription(await pc.createOffer());
       await gather(pc, ICE_WAIT);
       if (this.dead || this.pc !== pc) return;
@@ -305,6 +307,8 @@ export class RtcLink {
 
     try {
       await pc.setRemoteDescription(d.sdp);
+      if (this.dead || this.pc !== pc) return;
+      await this.attachVoice(pc, false);
       await pc.setLocalDescription(await pc.createAnswer());
       await gather(pc, ICE_WAIT);
       if (this.dead || this.pc !== pc) return;
@@ -329,6 +333,16 @@ export class RtcLink {
     ch.onmessage = (ev) => {
       if (typeof ev.data === 'string') this.h.onMessage?.(ev.data);
     };
+  }
+
+  async attachVoice(pc, host) {
+    const voice = this.h.voice;
+    if (!voice) return;
+    try {
+      await voice.attach(pc, host);
+    } catch {
+      voice.detach(pc);
+    }
   }
 
   watch(pc) {
@@ -385,6 +399,7 @@ export class RtcLink {
       try { ch.close(); } catch (e) { /* уже закрыт */ }
     }
     if (pc) {
+      this.h.voice?.detach(pc);
       pc.onconnectionstatechange = null;
       try { pc.close(); } catch (e) { /* уже закрыт */ }
     }
