@@ -1,0 +1,19 @@
+[Unit]
+Description=SKYFALL signaling API
+After=network.target
+
+[Service]
+User=skyfall
+Group=skyfall
+WorkingDirectory=/opt/skyfall-api/current
+EnvironmentFile=/etc/skyfall-api.env
+ExecStart=/opt/skyfall-node/bin/node /opt/skyfall-api/current/server.js
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

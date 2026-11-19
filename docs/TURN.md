@@ -4,7 +4,8 @@ The production game receives temporary TURN credentials when a player creates
 or joins a room. Direct WebRTC is preferred; TURN relays traffic when needed.
 The local Node server still uses the manual TURN fields.
 The GitHub Pages build at `https://xrip.github.io/skyfall/` uses the same
-Cloudflare room API and automatic credentials, with CORS preflight support.
+direct VPS room API at `https://api.skyfall.akimus.ru` and automatic credentials,
+with CORS preflight support. See [API.md](API.md) for service deployment.
 
 ## Server
 
@@ -13,14 +14,16 @@ Cloudflare room API and automatic credentials, with CORS preflight support.
 - Configuration: `/etc/turnserver.conf` (`root:turnserver`, mode `0640`).
 - Original configuration backup: `/root/skyfall-turn-backup/turnserver.conf.original`.
 - Shared secret: `/root/skyfall-turn-secret` (`root`, mode `0600`).
-- Client listeners: UDP and TCP `3478`, TLS over TCP `443`.
+- Client listeners: UDP and TCP `3478`, TLS over TCP `443` through nginx.
+- Coturn's TLS listener is on `5349`; nginx selects it by hostname on port `443`.
 - TLS hostname: `turn.skyfall.akimus.ru`, DNS-only A record to the server IP.
 - Relay range: UDP `62000–62199`.
 - No host firewall was active during installation. A provider firewall must
   allow the client listeners and relay range if one is added later.
 
 Coturn uses `use-auth-secret`, HMAC-SHA1 credentials, and realm
-`skyfall.akimus.ru`. The Worker stores the same value as the secret `TURN_SECRET`.
+`skyfall.akimus.ru`. The VPS API stores the same value as `TURN_SECRET` in
+`/etc/skyfall-api.env`. The legacy Worker has its own copy for older clients.
 Never put that value in Git, browser code, or the public `TURN_URLS` variable.
 
 The server allows 12 allocations per temporary user and 128 in total, with
@@ -40,8 +43,8 @@ If the Cloudflare token is replaced, update that file as well.
 `certbot.timer` runs renewal checks. The deploy hook
 `/etc/letsencrypt/renewal-hooks/deploy/restart-skyfall-turn` copies the renewed
 certificate and key into `/etc/coturn/tls/`, then restarts coturn. The key is
-readable only by root and the turnserver group. A systemd drop-in grants coturn
-`CAP_NET_BIND_SERVICE` so it can listen on port 443 as the turnserver user.
+readable only by root and the turnserver group. Nginx passes TLS through to
+coturn on port 5349 without decrypting TURN traffic.
 
 Check renewal without replacing the live certificate:
 
@@ -51,8 +54,9 @@ certbot renew --cert-name turn.skyfall.akimus.ru --dry-run
 
 ## Game configuration
 
-`wrangler.jsonc` contains the public `TURN_URLS`. `worker/turn.js` issues a unique
-username with a 24-hour expiry and its HMAC credential. Only successful room
+`/etc/skyfall-api.env` contains the production `TURN_URLS`; `wrangler.jsonc`
+contains the legacy Worker's copy. `shared/turn.mjs` issues a unique username
+with a 24-hour expiry and its HMAC credential. Only successful room
 creation and join responses include credentials; responses are not cached.
 No permanent password is sent to browsers.
 
@@ -72,7 +76,7 @@ systemctl restart coturn
 Credential and client fallback tests:
 
 ```sh
-node --test tools/turn.test.mjs
+node --test tools/turn.test.mjs tools/server.test.mjs
 ```
 
 For a real relay test, use two RTCPeerConnections with
@@ -83,6 +87,7 @@ Test UDP, TCP, and TLS separately. A successful STUN response alone is not a rel
 The live server passed this check from Chrome on 2026-11-18 over both UDP and
 TCP, with an echoed payload and relay candidates on both peers.
 
-If the shared secret changes, update both the coturn configuration and the
-Worker secret. Existing temporary credentials will become invalid. Deployment
-through GitHub Actions preserves Worker secrets.
+If the shared secret changes, update coturn, `/etc/skyfall-api.env`, and the
+legacy Worker secret. Restart the API after changing its environment file.
+Existing temporary credentials will become invalid. GitHub deployments preserve
+the environment file and Worker secrets.

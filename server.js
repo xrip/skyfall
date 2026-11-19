@@ -7,7 +7,9 @@ const os = require('os');
 const crypto = require('crypto');
 
 const ROOT = __dirname;
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT || 8080);
+const HOST = process.env.HOST || '0.0.0.0';
+const turnModule = import('./shared/turn.mjs');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -44,6 +46,12 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+async function withTurn(room) {
+  if (!process.env.TURN_SECRET || !process.env.TURN_URLS) return room;
+  const { createTurn } = await turnModule;
+  return { ...room, turn: await createTurn(process.env.TURN_SECRET, process.env.TURN_URLS, crypto.webcrypto) };
+}
+
 function readJsonBody(req) {
   return new Promise((resolve) => {
     let raw = '';
@@ -74,7 +82,7 @@ async function handleApi(req, res, path, query) {
       touched: Date.now(),
     };
     signals.set(code, room);
-    sendJson(res, 200, { code, token: room.host, role: 'host', seq: 0, session: 0 });
+    sendJson(res, 200, await withTurn({ code, token: room.host, role: 'host', seq: 0, session: 0 }));
     return;
   }
 
@@ -94,12 +102,12 @@ async function handleApi(req, res, path, query) {
     room.guest = crypto.randomBytes(16).toString('hex');
     room.session++;
     room.msgs = [];
-    sendJson(res, 200, { code, token: room.guest, role: 'guest', seq: room.seq, session: room.session });
+    sendJson(res, 200, await withTurn({ code, token: room.guest, role: 'guest', seq: room.seq, session: room.session }));
     return;
   }
 
   const token = query.get('token');
-  if (token !== room.host && token !== room.guest) {
+  if (!token || (token !== room.host && token !== room.guest)) {
     sendJson(res, 403, { error: 'Нет доступа к комнате' });
     return;
   }
@@ -196,16 +204,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, HOST, () => {
+  const port = server.address().port;
   console.log('');
   console.log('  SKYFALL — Небесный рубеж');
   console.log('  ---------------------------------------------');
-  console.log(`  Локально:  http://localhost:${PORT}`);
+  console.log(`  Локально:  http://localhost:${port}`);
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
     for (const net of nets[name] || []) {
       if (net.family === 'IPv4' && !net.internal) {
-        console.log(`  В сети:    http://${net.address}:${PORT}`);
+        console.log(`  В сети:    http://${net.address}:${port}`);
       }
     }
   }

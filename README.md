@@ -39,7 +39,7 @@ Workflow `.github/workflows/pages.yml` собирает статическую �
 на GitHub Pages при пуше в `master` или `main`. В настройках репозитория выберите
 источник **GitHub Actions**. На `https://xrip.github.io/skyfall/` работает
 кооператив: комнаты и временные TURN-реквизиты выдаёт API на
-`https://skyfall.akimus.ru`. Вводить логин и пароль TURN не нужно.
+`https://api.skyfall.akimus.ru` напрямую на VPS. Вводить логин и пароль TURN не нужно.
 
 ## Управление
 
@@ -431,8 +431,10 @@ Workflow `.github/workflows/pages.yml` собирает статическую �
 
 ## Cloudflare Workers (интернет-версия)
 
-Игра полностью serverless: Worker раздаёт статику и держит только сигнальный
-API на Durable Object. Игровой трафик идёт напрямую между игроками.
+Worker раздаёт статику. Публичные сборки на GitHub Pages и Cloudflare используют
+сигнальный API `https://api.skyfall.akimus.ru` на VPS, без прокси Cloudflare.
+Игровой трафик идёт между игроками напрямую или через TURN. Встроенный API
+Worker сохранён для совместимости и локального `wrangler dev`.
 
 ```bash
 npm install

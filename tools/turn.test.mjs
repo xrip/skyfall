@@ -94,14 +94,14 @@ test('Pages uses the production API while local development keeps the local API'
     return Response.json({ code: 'ABCD', token: 'test-player' });
   };
   try {
-    for (const hostname of ['xrip.github.io', 'localhost', 'skyfall.akimus.ru']) {
+    for (const hostname of ['xrip.github.io', 'localhost', 'skyfall.akimus.ru', 'skyfall.xrip.workers.dev']) {
       globalThis.location = { hostname };
       const { RtcLink: Link } = await import('../src/rtc.js?host-test=' + hostname);
       const link = new Link();
       link.startPoll = () => {};
       await link.host();
       await link.join('ABCD');
-      const base = hostname === 'xrip.github.io' ? 'https://skyfall.akimus.ru' : '';
+      const base = hostname === 'localhost' ? '' : 'https://api.skyfall.akimus.ru';
       assert.equal(paths.at(-2), base + '/api/rooms');
       assert.equal(paths.at(-1), base + '/api/rooms/ABCD/join');
     }

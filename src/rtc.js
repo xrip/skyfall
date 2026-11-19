@@ -15,10 +15,10 @@
 // и кладём всё в один пакет. Так сигналингу хватает нескольких запросов.
 // Если прямой путь закрыт, браузер использует TURN из ответа создания/входа в комнату.
 
-// GitHub Pages hosts files only; its co-op rooms use the production Worker.
-const SIG = globalThis.location?.hostname === 'xrip.github.io'
-  ? 'https://skyfall.akimus.ru/api/rooms'
-  : '/api/rooms';
+// All hosted builds share the direct VPS API; local development uses its own server.
+export const API_ORIGIN = ['xrip.github.io', 'skyfall.akimus.ru', 'skyfall.xrip.workers.dev']
+  .includes(globalThis.location?.hostname) ? 'https://api.skyfall.akimus.ru' : '';
+const SIG = API_ORIGIN + '/api/rooms';
 const STUN = [
   'stun:stun.cloudflare.com:3478',
   'stun:stun.l.google.com:19302',

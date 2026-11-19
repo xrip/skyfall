@@ -6,9 +6,12 @@
 //
 // WebSocket-релей оставлен как резервный путь: он включается, если сигнальный
 // API недоступен или если адрес открыт с ?net=ws.
-import { RtcLink } from './rtc.js';
+import { API_ORIGIN, RtcLink } from './rtc.js';
 
 const CHUNK = 48000;
+const SERVER_UNAVAILABLE = API_ORIGIN
+  ? 'Нет связи с сервером комнат. Проверьте доступ к api.skyfall.akimus.ru и обновите страницу.'
+  : 'Нет связи с игровым сервером. Для локальной игры запустите start.bat.';
 
 function wantsWs() {
   try {
@@ -37,8 +40,9 @@ export class Net {
   }
 
   get url() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${location.host}/ws`;
+    const api = new URL(API_ORIGIN || location.origin);
+    const proto = api.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${api.host}/ws`;
   }
 
   /* ================= лобби ================= */
@@ -229,7 +233,7 @@ export class Net {
       if (!this.connected) {
         this.attempting = false;
         try { ws.close(); } catch (e) {}
-        this.game.onNetError('Сервер не отвечает. Для онлайна задеплойте Cloudflare Worker, для локальной игры запустите start.bat.');
+        this.game.onNetError(SERVER_UNAVAILABLE);
       }
     }, 8000);
 
@@ -252,7 +256,7 @@ export class Net {
     ws.onerror = () => {
       if (!this.connected) {
         this.attempting = false;
-        this.game.onNetError('Нет связи с сигнальным сервером. Для онлайна нужен Worker, для локальной игры — start.bat.');
+        this.game.onNetError(SERVER_UNAVAILABLE);
       }
     };
   }

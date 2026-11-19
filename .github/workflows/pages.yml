@@ -1,6 +1,6 @@
 name: Deploy SKYFALL to GitHub Pages
 
-# GitHub Pages hosts the game; co-op uses the Cloudflare Worker API.
+# GitHub Pages hosts the game; co-op uses the direct VPS API.
 on:
   push:
     branches: [master, main]

@@ -1,0 +1,43 @@
+name: Deploy SKYFALL API to VPS
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - server.js
+      - shared/**
+      - tools/server.test.mjs
+      - tools/turn.test.mjs
+      - .github/workflows/api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skyfall-api-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test signaling and TURN
+        run: node --test tools/server.test.mjs tools/turn.test.mjs
+      - name: Deploy API commit
+        env:
+          DEPLOY_KEY: ${{ secrets.SKYFALL_API_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SKYFALL_API_KNOWN_HOSTS }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/skyfall_api
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/skyfall_api ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/skyfall_api' EXIT
+          ssh -i ~/.ssh/skyfall_api -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes root@62.84.172.208 "deploy $COMMIT_SHA"
