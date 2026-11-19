@@ -51,6 +51,18 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path.startsWith('/api/') && request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+
     if (path === '/api/rooms') {
       if (request.method !== 'POST') return json({ error: 'Только POST' }, 405);
       return createRoom(env);

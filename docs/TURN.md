@@ -3,6 +3,8 @@
 The production game receives temporary TURN credentials when a player creates
 or joins a room. Direct WebRTC is preferred; TURN relays traffic when needed.
 The local Node server still uses the manual TURN fields.
+The GitHub Pages build at `https://xrip.github.io/skyfall/` uses the same
+Cloudflare room API and automatic credentials, with CORS preflight support.
 
 ## Server
 

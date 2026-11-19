@@ -67,3 +67,47 @@ test('client uses room TURN, permits manual override, and clears old room creden
     else globalThis.localStorage = previous;
   }
 });
+
+test('Pages preflight succeeds without creating or joining a room', async () => {
+  for (const path of ['/api/rooms', '/api/rooms/ABCD/join', '/api/rooms/ABCD/signal']) {
+    const response = await worker.fetch(new Request('https://game' + path, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://xrip.github.io',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    }), {});
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('access-control-allow-origin'), '*');
+    assert.match(response.headers.get('access-control-allow-methods'), /POST/);
+    assert.match(response.headers.get('access-control-allow-headers'), /content-type/i);
+  }
+});
+
+test('Pages uses the production API while local development keeps the local API', async () => {
+  const previousLocation = globalThis.location;
+  const previousFetch = globalThis.fetch;
+  const paths = [];
+  globalThis.fetch = async (path) => {
+    paths.push(path);
+    return Response.json({ code: 'ABCD', token: 'test-player' });
+  };
+  try {
+    for (const hostname of ['xrip.github.io', 'localhost', 'skyfall.akimus.ru']) {
+      globalThis.location = { hostname };
+      const { RtcLink: Link } = await import('../src/rtc.js?host-test=' + hostname);
+      const link = new Link();
+      link.startPoll = () => {};
+      await link.host();
+      await link.join('ABCD');
+      const base = hostname === 'xrip.github.io' ? 'https://skyfall.akimus.ru' : '';
+      assert.equal(paths.at(-2), base + '/api/rooms');
+      assert.equal(paths.at(-1), base + '/api/rooms/ABCD/join');
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousLocation === undefined) delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});

@@ -1,9 +1,9 @@
 name: Deploy SKYFALL to GitHub Pages
 
-# GitHub Pages — только одиночная игра: там нет сигнального API для кооператива.
-# Автодеплой выключен: включите Pages (Settings → Pages → Source: GitHub Actions)
-# и запустите workflow вручную из вкладки Actions.
+# GitHub Pages hosts the game; co-op uses the Cloudflare Worker API.
 on:
+  push:
+    branches: [master, main]
   workflow_dispatch:
 
 permissions:

@@ -37,9 +37,9 @@ node server.js
 
 Workflow `.github/workflows/pages.yml` собирает статическую версию и публикует её
 на GitHub Pages при пуше в `master` или `main`. В настройках репозитория выберите
-источник **GitHub Actions**. На Pages доступна одиночная игра: там нет
-сигнального API, поэтому кооператив не подключится. Для онлайна деплойте
-Worker (см. «Cloudflare Workers»).
+источник **GitHub Actions**. На `https://xrip.github.io/skyfall/` работает
+кооператив: комнаты и временные TURN-реквизиты выдаёт API на
+`https://skyfall.akimus.ru`. Вводить логин и пароль TURN не нужно.
 
 ## Управление
 

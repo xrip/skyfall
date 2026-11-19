@@ -1302,7 +1302,7 @@ export class Game {
   clearTurnSettings() {
     saveTurn(null);
     this.fillTurnFields();
-    this.setCoopStatus('turn-status', 'TURN отключён — используется только STUN.');
+    this.setCoopStatus('turn-status', 'Свой TURN отключён — используются настройки игрового сервера.');
   }
 
   createRoom() {
