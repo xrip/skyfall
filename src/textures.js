@@ -327,17 +327,32 @@ const TILE_PAINTERS = {
   },
 
   crystal(g, rng) {
-    g.fillStyle = 'rgb(22,48,60)';
+    g.fillStyle = 'rgb(42,96,116)';
     g.fillRect(0, 0, 16, 16);
-    speck(g, rng, [34, 84, 104], 24, 14);
-    g.fillStyle = 'rgb(96,214,240)';
-    g.fillRect(3, 2, 4, 12);
-    g.fillRect(9, 5, 4, 9);
-    g.fillStyle = 'rgb(190,250,255)';
-    g.fillRect(4, 3, 1, 8);
-    g.fillRect(10, 6, 1, 6);
-    g.fillStyle = 'rgb(58,132,158)';
-    g.fillRect(0, 0, 16, 1);
+    speck(g, rng, [56, 118, 140], 18, 14);
+    const poly = (pts, fill) => {
+      g.beginPath();
+      pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      g.fillStyle = fill;
+      g.fill();
+    };
+    // плотная друза: несколько огранённых кристаллов
+    poly([[3, 3], [6, 1], [8, 6], [6, 11], [2, 10]], 'rgb(72,188,218)');
+    poly([[6, 1], [8, 6], [7, 11], [5, 10]], 'rgb(168,240,255)');
+    poly([[9, 4], [12, 2], [14, 7], [12, 13], [8, 11]], 'rgb(54,166,196)');
+    poly([[12, 2], [14, 7], [13, 12], [11, 12]], 'rgb(136,232,250)');
+    poly([[5, 10], [8, 9], [10, 14], [6, 15]], 'rgb(40,124,152)');
+    poly([[8, 9], [10, 14], [8, 15], [6, 14]], 'rgb(96,206,232)');
+    poly([[1, 8], [3, 6], [4, 12], [2, 14]], 'rgb(44,132,160)');
+    // блики
+    g.fillStyle = '#eaffff';
+    g.fillRect(5, 3, 1, 1);
+    g.fillRect(12, 5, 1, 1);
+    g.fillRect(7, 11, 1, 1);
+    g.fillRect(3, 9, 1, 1);
+    // тёмные швы у основания
+    g.fillStyle = 'rgba(8,22,30,.55)';
     g.fillRect(0, 15, 16, 1);
   },
 };

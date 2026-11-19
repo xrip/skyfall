@@ -117,6 +117,9 @@ export class World {
     this.dirty = new Set();
     this.edits = new Map();
     this.chunkMeshes = new Map();
+    this.crystalMeshes = new Map();
+    this.crystalGeo = null;
+    this.crystalMaterial = null;
     this.material = null;
     this.atlas = null;
     this.sites = [];
@@ -1391,9 +1394,15 @@ export class World {
       if (y < 0 || y > 52 || blocked(x, z)) continue;
       const top = this.get(x, y, z);
       if (top !== B.STONE && top !== B.CRYSTAL) continue;
-      const h = 1 + Math.floor(hash2(x, z, this.seed + 92) * 4);
+      const h = 2 + Math.floor(hash2(x, z, this.seed + 92) * 4);
       for (let i = 0; i < h; i++) this.setRaw(x, y + 1 + i, z, B.CRYSTAL);
-      if (hash2(x, z, this.seed + 93) > 0.45) this.setRaw(x + 1, y + 1, z, B.CRYSTAL);
+      for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (hash2(x + ox * 7, z + oz * 11, this.seed + 94) < 0.45) continue;
+        const hh = 1 + Math.floor(hash2(x + ox, z + oz, this.seed + 95) * Math.max(1, h - 1));
+        for (let i = 0; i < hh; i++) {
+          if (this.get(x + ox, y + 1 + i, z + oz) === 0) this.setRaw(x + ox, y + 1 + i, z + oz, B.CRYSTAL);
+        }
+      }
       spires++;
     }
   }
@@ -1609,6 +1618,10 @@ export class World {
       map: this.atlas.texture,
       vertexColors: true,
     });
+    this.crystalGeo = new THREE.ConeGeometry(1, 2, 5);
+    this.crystalMaterial = new THREE.MeshLambertMaterial({
+      color: 0x9ff4ff, emissive: 0x1a6a7a, emissiveIntensity: 0.9, flatShading: true,
+    });
     scene.add(this.group);
     for (let cz = 0; cz < SZ / CHUNK; cz++) {
       for (let cx = 0; cx < SX / CHUNK; cx++) {
@@ -1627,13 +1640,93 @@ export class World {
       this.chunkMeshes.delete(key);
     }
     const geo = this.buildChunkGeometry(cx, cz);
-    if (!geo) return;
+    if (!geo) { this.buildCrystalMesh(cx, cz); return; }
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     this.group.add(mesh);
     this.chunkMeshes.set(key, mesh);
+    this.buildCrystalMesh(cx, cz);
+  }
+
+  // Кристаллы рисуются не кубами, а острыми осколками поверх блока.
+  buildCrystalMesh(cx, cz) {
+    const key = cx + ',' + cz;
+    const old = this.crystalMeshes.get(key);
+    if (old) {
+      this.group.remove(old);
+      old.dispose();
+      this.crystalMeshes.delete(key);
+    }
+    if (!this.crystalGeo || !this.crystalMaterial) return;
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const cells = [];
+    for (let y = 0; y < SY; y++) {
+      for (let z = z0; z < z0 + CHUNK; z++) {
+        for (let x = x0; x < x0 + CHUNK; x++) {
+          if (this.get(x, y, z) !== B.CRYSTAL) continue;
+          cells.push([x, y, z]);
+        }
+      }
+    }
+    if (!cells.length) return;
+
+    const mats = [];
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const add = (px, py, pz, h, r, ex, ey, ez) => {
+      e.set(ex, ey, ez);
+      q.setFromEuler(e);
+      p.set(px, py, pz);
+      s.set(r, h / 2, r);
+      m.compose(p, q, s);
+      mats.push(m.clone());
+    };
+    const dirs = [
+      { dx: 1, dz: 0, rot: [0, 0, -1.05] },
+      { dx: -1, dz: 0, rot: [0, 0, 1.05] },
+      { dx: 0, dz: 1, rot: [1.05, 0, 0] },
+      { dx: 0, dz: -1, rot: [-1.05, 0, 0] },
+    ];
+
+    for (const [x, y, z] of cells) {
+      const hx = hash2(x, z, this.seed + 501);
+      const hz = hash2(z, x, this.seed + 502);
+      if (this.get(x, y + 1, z) === 0) {
+        for (let k = 0; k < 4; k++) {
+          const h = 0.45 + hash2(x + k * 7, z + k * 11, this.seed + 503) * 0.75;
+          const r = 0.09 + hash2(x + k * 3, z + k * 5, this.seed + 504) * 0.08;
+          const ox = (k === 0 ? 0 : Math.cos(k * 2.1 + hx * 6) * 0.24) + (hx - 0.5) * 0.1;
+          const oz = (k === 0 ? 0 : Math.sin(k * 2.1 + hz * 6) * 0.24) + (hz - 0.5) * 0.1;
+          add(x + 0.5 + ox, y + 1 + h / 2 - 0.12, z + 0.5 + oz, h, r,
+            (hx - 0.5) * 0.35, hx * Math.PI * 2, (hz - 0.5) * 0.35);
+        }
+      }
+      // осколки, торчащие из открытых боковых граней
+      for (const d of dirs) {
+        if (this.get(x + d.dx, y, z + d.dz) !== 0) continue;
+        if (hash2(x + d.dx * 13, z + d.dz * 17, this.seed + 505) < 0.35) continue;
+        const h = 0.35 + hash2(x + d.dx * 3, z + d.dz * 5, this.seed + 506) * 0.45;
+        const r = 0.07 + hash2(x + d.dz * 7, z + d.dx * 11, this.seed + 507) * 0.05;
+        add(
+          x + 0.5 + d.dx * 0.52, y + 0.5 + (hash2(x, z, this.seed + 508) - 0.5) * 0.3, z + 0.5 + d.dz * 0.52,
+          h, r, d.rot[0], d.rot[1], d.rot[2]
+        );
+      }
+    }
+    if (!mats.length) return;
+
+    const mesh = new THREE.InstancedMesh(this.crystalGeo, this.crystalMaterial, mats.length);
+    for (let i = 0; i < mats.length; i++) mesh.setMatrixAt(i, mats[i]);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.castShadow = false;
+    mesh.frustumCulled = false;
+    this.group.add(mesh);
+    this.crystalMeshes.set(key, mesh);
   }
 
   buildChunkGeometry(cx, cz) {
@@ -1801,6 +1894,13 @@ export class World {
   dispose() {
     for (const m of this.chunkMeshes.values()) m.geometry.dispose();
     this.chunkMeshes.clear();
+    for (const m of this.crystalMeshes.values()) {
+      this.group.remove(m);
+      m.dispose();
+    }
+    this.crystalMeshes.clear();
+    if (this.crystalGeo) { this.crystalGeo.dispose(); this.crystalGeo = null; }
+    if (this.crystalMaterial) { this.crystalMaterial.dispose(); this.crystalMaterial = null; }
     if (this.material) this.material.dispose();
     if (this.fenceGroup) {
       const geos = new Set();
