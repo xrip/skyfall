@@ -1067,7 +1067,13 @@ export class Mob {
   updateFlyer(dt, dirX, dirZ, distH, target) {
     const cfg = this.cfg;
     const hover = cfg.hoverHeight ?? 4.2;
-    const desiredY = target.pos.y + hover + Math.sin(this.animTime * 0.9 + this.phase) * 0.7;
+    let desiredY = target.pos.y + hover + Math.sin(this.animTime * 0.9 + this.phase) * 0.7;
+    if (this.game.dungeonActive) {
+      const d = this.game.world.dungeon;
+      const floor = (d.start ? d.start.y - 0.2 : 30);
+      const maxY = floor + (d.caveH ?? 4) - 1.4;
+      desiredY = Math.min(desiredY, maxY);
+    }
     let mx = 0, mz = 0;
     const keep = cfg.keepRange ?? 10;
     const minR = cfg.minRange ?? 5.5;
@@ -1094,6 +1100,15 @@ export class Mob {
     }
     if (this.pos.y < 4) this.pos.y = 4;
     if (this.pos.y > 72) this.pos.y = 72;
+    if (this.game.dungeonActive) {
+      const d = this.game.world.dungeon;
+      const floor = (d.start ? d.start.y - 0.2 : 30);
+      const maxY = floor + (d.caveH ?? 4) - 1.2;
+      if (this.pos.y > maxY) {
+        this.pos.y = maxY;
+        this.vel.y = Math.min(0, this.vel.y);
+      }
+    }
 
     const d = Math.hypot(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
     if (this.attackCd <= 0 && d < (cfg.castRange ?? 19)) {

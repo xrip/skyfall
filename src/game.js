@@ -2525,16 +2525,15 @@ export class Game {
 
   onPlayerDeath() {
     if (this.state !== 'playing') return;
-    if (this.dungeonActive && this.world?.dungeon) {
-      const s = this.world.dungeon.start;
-      this.player.alive = true;
-      this.player.pos.set(s.x, s.y, s.z);
-      this.player.hp = this.player.maxHp;
-      this.player.vel.set(0, 0, 0);
-      this.player.invuln = 3;
-      this.ui.feed('<b>ПОДЗЕМЕЛЬЕ</b> · возврат ко входу');
-      this.updateHealth();
-      return;
+    if (this.dungeonActive) {
+      if (this.netRole === 'guest') {
+        this.net.send({ t: 'event', kind: 'dungeonExitReq' });
+        this.exitDungeon(true, true);
+      } else {
+        const notifyPeer = this.netRole === 'host' && this.peerJoined;
+        this.exitDungeon(true, true);
+        if (notifyPeer) this.net.send({ t: 'event', kind: 'dungeonExit' });
+      }
     }
     if (this.runMode === 'sandbox') {
       this.player.alive = true;
@@ -2972,7 +2971,19 @@ export class Game {
       const mins = MOBS[this.dungeonBossKey].minions;
       for (let i = 0; i < d.spawns.length; i++) {
         const p = d.spawns[i];
-        this.spawnMob(mins[i % 2], { x: p.x, y: p.y, z: p.z });
+        const type = mins[i % 2];
+        this.spawnMob(type, { x: p.x, y: p.y, z: p.z });
+        const mob = this.mobs[this.mobs.length - 1];
+        if (!mob || mob.type !== type) continue;
+        if (mob.cfg.flying) {
+          mob.pos.y = p.y + 1.5;
+          mob.group.position.copy(mob.pos);
+        }
+        if (mob.pos.y < p.y - 0.6 || mob.pos.y > p.y + 3.2) {
+          // страховка: прихвостень не должен оказаться на крыше пещеры
+          this.mobs.pop();
+          mob.dispose();
+        }
       }
     }
     this.ui.banner('ПОДЗЕМЕЛЬЕ', MOBS[this.dungeonBossKey].title, 'Прихвостни на пути. Найдите логово.', true, 4400);
@@ -2980,7 +2991,7 @@ export class Game {
     this.updateHealth();
   }
 
-  exitDungeon(fromNet = false) {
+  exitDungeon(fromNet = false, quiet = false) {
     if (!this.dungeonActive) return;
     if (!fromNet && this.netRole === 'guest') {
       this.net.send({ t: 'event', kind: 'dungeonExitReq' });
@@ -3047,7 +3058,9 @@ export class Game {
     this.ui.updateChests(this.chestTotal, this.chestsLooted);
     this.updateScrollHint();
     this.ui.setHazard('');
-    this.ui.banner('ВОЗВРАЩЕНИЕ', 'ОСТРОВ', 'Вы вернулись из логова', false, 2600);
+    if (!quiet) {
+      this.ui.banner('ВОЗВРАЩЕНИЕ', 'ОСТРОВ', 'Вы вернулись из логова', false, 2600);
+    }
     if (!fromNet && this.netRole === 'host' && this.peerJoined) {
       this.net.send({ t: 'event', kind: 'dungeonExit' });
     }

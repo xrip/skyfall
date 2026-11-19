@@ -54,42 +54,50 @@ const CAVE_STYLES = {
   colossus: {
     floor: B.STONE, wall: B.STONE, ceil: B.STONE, accents: [B.BRICK, B.RUST],
     light: 0xffb060, fog: 0x2a1a12, hemiSky: 0x6a4a3a, hemiGround: 0x1a0f0a, hemi: 1.05,
-    legs: [[30, 0], [0, 18], [24, 0], [0, -14], [20, 0], [0, 18], [26, 0]],
+    rMin: 3.6, rVar: 1.2, caveH: 5, bossR: 13, bossH: 8, minions: 38,
+    legs: [[32, 0], [0, 18], [26, 0], [0, -14], [22, 0], [0, 18], [26, 0]],
   },
   reaper: {
     floor: B.STONE, wall: B.STONE, ceil: B.STONE, accents: [B.OBSIDIAN, B.RUST],
     light: 0x9dffc4, fog: 0x120a1a, hemiSky: 0x4a3a5a, hemiGround: 0x0e0812, hemi: 0.95,
-    legs: [[18, 0], [0, 20], [14, 0], [0, -16], [20, 0], [0, 14], [28, 0]],
+    rMin: 2.6, rVar: 0.8, caveH: 3, bossR: 9, bossH: 5, minions: 52,
+    legs: [[14, 0], [0, 12], [10, 0], [0, -10], [14, 0], [0, 12], [18, 0]],
   },
   hive: {
     floor: B.DIRT, wall: B.BRICK, ceil: B.BRICK, accents: [B.HAY, B.PLANKS],
     light: 0xffe14a, fog: 0x241c08, hemiSky: 0x6a5a2a, hemiGround: 0x1a1408, hemi: 1.0,
+    rMin: 3.0, rVar: 1.0, caveH: 4, bossR: 10, bossH: 6, minions: 48,
     legs: [[24, 0], [0, 12], [18, 0], [0, 20], [16, 0], [0, -10], [30, 0]],
   },
   magma: {
     floor: B.BASALT, wall: B.BASALT, ceil: B.OBSIDIAN, accents: [B.MAGMA, B.OBSIDIAN],
     light: 0xff7a2a, fog: 0x2a0c06, hemiSky: 0x7a3a2a, hemiGround: 0x200806, hemi: 0.95,
+    rMin: 3.8, rVar: 1.4, caveH: 5, bossR: 12, bossH: 7, minions: 44,
     legs: [[34, 0], [0, 14], [20, 0], [0, -18], [26, 0], [0, 16], [18, 0]],
   },
   warden: {
     floor: B.OBSIDIAN, wall: B.STONE, ceil: B.OBSIDIAN, accents: [B.OBSIDIAN, B.METAL],
     light: 0xa8f6ff, fog: 0x0a1a22, hemiSky: 0x3a5a6a, hemiGround: 0x08121a, hemi: 1.0,
+    rMin: 3.2, rVar: 1.0, caveH: 6, bossR: 12, bossH: 8, minions: 40,
     legs: [[20, 0], [0, 16], [26, 0], [0, -10], [22, 0], [0, 20], [20, 0]],
   },
   shepherd: {
     floor: B.INF_DIRT, wall: B.INF_STONE, ceil: B.INF_STONE, accents: [B.INF_BRICK, B.INF_METAL],
     light: 0xc6ff6a, fog: 0x10200c, hemiSky: 0x4a6a3a, hemiGround: 0x0e1a0a, hemi: 1.05,
+    rMin: 3.0, rVar: 1.2, caveH: 4, bossR: 11, bossH: 6, minions: 50,
     legs: [[28, 0], [0, 22], [14, 0], [0, -12], [26, 0], [0, 10], [22, 0]],
   },
   storm: {
     floor: B.METAL, wall: B.STONE, ceil: B.METAL, accents: [B.METAL, B.RUST],
     light: 0x9fe0ff, fog: 0x0a1422, hemiSky: 0x3a5a7a, hemiGround: 0x081018, hemi: 1.0,
+    rMin: 3.4, rVar: 1.2, caveH: 6, bossR: 12, bossH: 8, minions: 46,
     legs: [[24, 0], [0, 10], [28, 0], [0, -18], [18, 0], [0, 22], [20, 0]],
   },
   worm: {
     floor: B.SAND, wall: B.SAND, ceil: B.STONE, accents: [B.BASALT, B.SAND],
     light: 0xffb144, fog: 0x2a2010, hemiSky: 0x6a5a3a, hemiGround: 0x1a1408, hemi: 1.1,
-    legs: [[36, 0], [0, 16], [16, 0], [0, -12], [30, 0], [0, 14], [18, 0]],
+    rMin: 4.0, rVar: 1.4, caveH: 3, bossR: 14, bossH: 5, minions: 42,
+    legs: [[40, 0], [0, 18], [18, 0], [0, -14], [34, 0], [0, 16], [22, 0]],
   },
 };
 
@@ -1385,16 +1393,17 @@ export class World {
       for (let i = 0; i < len; i++) {
         px += sx; pz += sz;
         dirX = sx || 0; dirZ = sz || 0;
-        path.push({ x: px, z: pz, r: 3 + rnd() * 1.4 });
+        path.push({ x: px, z: pz, r: style.rMin + rnd() * style.rVar });
       }
     }
     const end = path[path.length - 1];
 
     // сплошной камень вокруг маршрута
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    const fillPad = Math.max(8, style.bossR + 4);
     for (const p of path) {
-      minX = Math.min(minX, p.x - 7); maxX = Math.max(maxX, p.x + 7);
-      minZ = Math.min(minZ, p.z - 7); maxZ = Math.max(maxZ, p.z + 7);
+      minX = Math.min(minX, p.x - fillPad); maxX = Math.max(maxX, p.x + fillPad);
+      minZ = Math.min(minZ, p.z - fillPad); maxZ = Math.max(maxZ, p.z + fillPad);
     }
     minX = Math.max(2, minX - 10); maxX = Math.min(SX - 2, maxX + 10);
     minZ = Math.max(2, minZ - 10); maxZ = Math.min(SZ - 2, maxZ + 10);
@@ -1422,8 +1431,8 @@ export class World {
       }
     };
 
-    for (const p of path) carveDisc(p.x + 0.5, p.z + 0.5, p.r, 4);
-    carveDisc(end.x + 0.5, end.z + 0.5, 10.5, 6);
+    for (const p of path) carveDisc(p.x + 0.5, p.z + 0.5, p.r, style.caveH);
+    carveDisc(end.x + 0.5, end.z + 0.5, style.bossR, style.bossH);
 
     // сталактиты по краям
     for (let i = 6; i < path.length - 8; i += 4) {
@@ -1461,14 +1470,22 @@ export class World {
     this.lights.push({ x: end.x + 0.5, y: floorY + 3, z: end.z + 0.5, color: style.light, intensity: 2.8 });
     this.lights.push({ x: end.x - 6.5, y: floorY + 2.6, z: end.z + 4.5, color: style.light, intensity: 2.2 });
 
-    // точки прихвостней вдоль пути (вдвое больше)
+    // точки прихвостней вдоль пути: только внутри пещеры, не на крыше
     const spawns = [];
-    for (let i = 6; i < path.length - 10; i += 2) {
+    for (let i = 6; i < path.length - 10; i += 1) {
       const p = path[i];
       if (Math.hypot(p.x - start.x, p.z - start.z) < 14) continue;
-      const a = rnd() * Math.PI * 2;
-      const rr = rnd() * 1.6;
-      spawns.push({ x: p.x + 0.5 + Math.cos(a) * rr, y: floorY + 0.1, z: p.z + 0.5 + Math.sin(a) * rr });
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const a = rnd() * Math.PI * 2;
+        const rr = rnd() * 1.4;
+        const x = Math.floor(p.x + Math.cos(a) * rr);
+        const z = Math.floor(p.z + Math.sin(a) * rr);
+        if (this.get(x, floorY, z) !== 0 || this.get(x, floorY + 1, z) !== 0) continue;
+        if (!this.isSolid(x, floorY - 1, z)) continue;
+        spawns.push({ x: x + 0.5, y: floorY + 0.1, z: z + 0.5 });
+        break;
+      }
+      if (spawns.length >= style.minions) break;
     }
 
     // награда за спиной босса
@@ -1477,9 +1494,10 @@ export class World {
     const fx = dirX / dl, fz = dirZ / dl;
     const sideX = -fz, sideZ = fx;
 
-    this.spawnPoints = spawns.slice(0, 44);
+    this.spawnPoints = spawns.slice(0, style.minions);
     this.dungeon = {
       path: path.map((p) => ({ x: p.x, z: p.z })),
+      minions: style.minions,
       atmosphere: {
         fog: style.fog,
         hemiSky: style.hemiSky,
@@ -1491,7 +1509,8 @@ export class World {
       start: { x: start.x + 0.5, y: floorY + 0.2, z: start.z + 0.5 },
       boss: { x: bx + 0.5, y: floorY + 0.1, z: bz + 0.5 },
       portal: { x: bx + fx * 7 + sideX * 4, y: floorY, z: bz + fz * 7 + sideZ * 4 },
-      spawns: spawns.slice(0, 44),
+      spawns: spawns.slice(0, style.minions),
+      caveH: style.caveH,
       chests: [
         { x: Math.floor(bx + fx * 6 + sideX * -3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * -3) },
         { x: Math.floor(bx + fx * 6 + sideX * 3), y: floorY, z: Math.floor(bz + fz * 6 + sideZ * 3) },
