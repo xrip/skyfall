@@ -2749,12 +2749,17 @@ export class Game {
     const starterNeed = chest.data.starter && !player.owned.smg && !player.owned.shotgun && !player.owned.rifle;
     let weaponKey = null;
     if (starterNeed) {
-      // на спавне всегда разное оружие, а не один и тот же ПП
-      const pool = ['smg', 'shotgun', 'rifle', 'ak', 'axe', 'bat', 'sword'];
+      // на спавне разное оружие; огнестрел выпадает реже ближнего боя
+      const guns = ['smg', 'shotgun', 'rifle', 'ak'];
+      const melee = ['axe', 'bat', 'sword'];
+      const pool = Math.random() < 0.35 ? guns : melee;
       weaponKey = pool[Math.floor(Math.random() * pool.length)];
     } else if (Math.random() < t.weapon[0]) {
       const list = t.weapon[1];
-      weaponKey = list[Math.floor(Math.random() * list.length)];
+      const wantGun = Math.random() < (t.gun ?? 0.4);
+      const filtered = list.filter((k) => !!WEAPONS[k]?.melee !== wantGun);
+      const pool = filtered.length ? filtered : list;
+      weaponKey = pool[Math.floor(Math.random() * pool.length)];
     }
     const newBlocks = [B.BRICK, B.METAL, B.OBSIDIAN].filter(id => (player.blocks[id] || 0) > 0 && !player.hotbarBlocks.includes(id));
     if (newBlocks.length) lines.push('<b>Новые блоки в инвентаре</b> · клавиша I');
@@ -2764,7 +2769,7 @@ export class Game {
     }
 
     // rare firepower if the player only has a pistol late in the run
-    if (!weaponKey && tier >= 2 && !player.owned.rifle && this.chestsLooted >= 4 && Math.random() < 0.5) {
+    if (!weaponKey && tier >= 2 && !player.owned.rifle && !player.owned.ak && this.chestsLooted >= 4 && Math.random() < 0.18) {
       const wl = player.giveWeapon('rifle');
       if (wl) lines.push(`<b>ОРУЖИЕ:</b> ${wl}`);
     }
