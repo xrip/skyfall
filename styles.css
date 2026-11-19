@@ -183,10 +183,13 @@ button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer
 .zone-line.volcano b{color:#ffb08a}
 .zone-line.radiation{color:#a8ff6a;border-color:rgba(140,255,90,.35)}
 .zone-line.radiation b{color:#d0ff9a}
+.zone-line.crystal{color:#8ef0ff;border-color:rgba(120,235,255,.35)}
+.zone-line.crystal b{color:#c8f8ff}
 #hazard-warning{position:absolute;left:50%;top:59%;transform:translateX(-50%);z-index:30;padding:7px 16px;font:800 11px/1 var(--mono);letter-spacing:.16em;color:#f0ffe0;background:rgba(40,90,20,.72);border:1px solid rgba(168,255,106,.6);text-shadow:0 0 12px rgba(160,255,90,.8);pointer-events:none;white-space:nowrap}
 #hazard-warning.magma{color:#fff0e0;background:rgba(120,40,10,.75);border-color:rgba(255,140,70,.7);text-shadow:0 0 12px rgba(255,120,40,.8)}
 #zone-overlay{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity .5s ease,background .5s ease;background:transparent}
 #zone-overlay.radiation{opacity:1;background:radial-gradient(ellipse at center,rgba(120,255,90,0) 38%,rgba(110,255,70,.13) 78%,rgba(90,230,50,.22) 100%)}
+#zone-overlay.crystal{opacity:1;background:radial-gradient(ellipse at center,rgba(140,240,255,0) 40%,rgba(120,230,255,.10) 78%,rgba(80,200,240,.18) 100%)}
 #zone-overlay.volcano{opacity:1;background:radial-gradient(ellipse at center,rgba(255,120,40,0) 42%,rgba(255,110,30,.12) 80%,rgba(230,70,20,.22) 100%)}
 .coin-line{color:var(--muted);font-size:9px}
 .coin-line b{color:var(--acc);font-size:12px}

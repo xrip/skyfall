@@ -172,9 +172,9 @@ export class World {
     const seed = this.seed;
     const TAU = Math.PI * 2;
     const offset = hash2(seed, 5, seed + 701) * TAU;
-    // в одном забеге только одна опасная зона: вулкан или радиация, 50/50
-    const volcano = hash2(seed, 7, seed + 705) < 0.5;
-    this.zoneType = volcano ? ZONE.VOLCANO : ZONE.RADIATION;
+    // в одном забеге только одна опасная/особая зона: вулкан, радиация или кристаллы
+    const roll = hash2(seed, 7, seed + 705);
+    this.zoneType = roll < 1 / 3 ? ZONE.VOLCANO : roll < 2 / 3 ? ZONE.RADIATION : ZONE.CRYSTAL;
     const width = 0.85 + hash2(seed, 3, seed + 703) * 0.35;
     for (let x = 0; x < SX; x++) {
       for (let z = 0; z < SZ; z++) {
@@ -291,6 +291,10 @@ export class World {
           deepId = B.INF_STONE;
           soilId = B.INF_DIRT;
           topId = shore ? B.INF_SAND : (topNoise > 0.72 ? B.INF_STONE : B.INF_GRASS);
+        } else if (zone === ZONE.CRYSTAL) {
+          deepId = fbm(x * 0.09, z * 0.09, seed + 43, 2) > 0.72 ? B.OBSIDIAN : B.STONE;
+          soilId = B.STONE;
+          topId = topNoise > 0.68 ? B.CRYSTAL : B.STONE;
         } else {
           topId = shore ? B.SAND : (topNoise > 0.72 ? B.STONE : B.GRASS);
         }
@@ -351,11 +355,12 @@ export class World {
       { key: 'farm',    label: 'ФЕРМА', w: 19, d: 17, minR: 28, maxR: 60, zone: ZONE.NORMAL },
       { key: 'volcano', label: 'ВУЛКАН', w: 23, d: 23, minR: 28, maxR: 62, zone: ZONE.VOLCANO },
       { key: 'reactor', label: 'РЕАКТОР', w: 17, d: 17, minR: 28, maxR: 62, zone: ZONE.RADIATION },
+      { key: 'crystal', label: 'КРИСТАЛЬНАЯ ШАХТА', w: 21, d: 21, minR: 28, maxR: 62, zone: ZONE.CRYSTAL },
     ];
     const placed = [];
 
     // только 6 локаций за забег; опасная — та, что совпадает с зоной
-    const zoneType = this.zoneType === ZONE.VOLCANO ? ZONE.VOLCANO : ZONE.RADIATION;
+    const zoneType = this.zoneType;
     const normal = specs.filter((s) => s.zone === ZONE.NORMAL);
     const special = specs.find((s) => s.zone === zoneType);
     const order = normal.slice();
@@ -429,6 +434,7 @@ export class World {
       case 'farm': this.buildFarm(s.x, s.z); break;
       case 'volcano': this.buildVolcano(s.x, s.z); break;
       case 'reactor': this.buildReactor(s.x, s.z); break;
+      case 'crystal': this.buildCrystalMine(s.x, s.z); break;
       default: break;
     }
   }
@@ -1047,6 +1053,64 @@ export class World {
     }
   }
 
+  buildCrystalMine(cx, cz) {
+    const baseY = this.areaMaxHeight(cx, cz, 19, 19);
+    this.level(cx, cz, 19, 19, baseY, B.STONE);
+    // ступенчатая шахта вниз
+    const depth = 11;
+    for (let d = 0; d < depth; d++) {
+      const r = 6 - Math.floor(d * 0.55);
+      const y = baseY - d;
+      for (let x = -r; x <= r; x++) {
+        for (let z = -r; z <= r; z++) {
+          if (x * x + z * z > r * r + 1) continue;
+          this.setRaw(cx + x, y, cz + z, 0);
+        }
+      }
+    }
+    const bottom = baseY - depth + 1;
+    // камера на дне
+    for (let x = -5; x <= 5; x++) {
+      for (let z = -5; z <= 5; z++) {
+        if (Math.hypot(x, z) > 5.5) continue;
+        this.setRaw(cx + x, bottom - 1, cz + z, B.STONE);
+        this.setRaw(cx + x, bottom, cz + z, 0);
+        this.setRaw(cx + x, bottom + 1, cz + z, 0);
+      }
+    }
+    // кристаллические жилы в стенах шахты
+    for (let i = 0; i < 48; i++) {
+      const a = hash2(i, 3, this.seed + 861) * Math.PI * 2;
+      const d = Math.floor(hash2(3, i, this.seed + 862) * depth);
+      const r = Math.max(1, 6 - Math.floor(d * 0.55));
+      const y = baseY - d;
+      const x = Math.round(cx + Math.cos(a) * r);
+      const z = Math.round(cz + Math.sin(a) * r);
+      if (this.get(x, y, z) === 0) this.setRaw(x, y, z, B.CRYSTAL);
+    }
+    // кристаллы на дне
+    for (let i = 0; i < 12; i++) {
+      const a = hash2(i, 7, this.seed + 863) * Math.PI * 2;
+      const rr = hash2(7, i, this.seed + 864) * 4;
+      const x = Math.round(cx + Math.cos(a) * rr);
+      const z = Math.round(cz + Math.sin(a) * rr);
+      const h = 1 + Math.floor(hash2(x, z, this.seed + 865) * 3);
+      for (let k = 0; k < h; k++) this.setRaw(x, bottom + k, z, B.CRYSTAL);
+    }
+    this.addChest(cx - 3, bottom, cz + 3, 3);
+    this.addChest(cx + 3, bottom, cz - 3, 2);
+    this.addLight(cx, bottom + 2, cz, 0x8ef0ff, 1.9);
+    this.addLight(cx, baseY + 2, cz, 0xa8f6ff, 1.2);
+    // кристаллы по ободу
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const x = Math.round(cx + Math.cos(a) * 7);
+      const z = Math.round(cz + Math.sin(a) * 7);
+      const y = this.surfaceY(x, z);
+      if (y >= 0) this.setRaw(x, y + 1, z, B.CRYSTAL);
+    }
+  }
+
   buildFloatingIsles(cx, cz) {
     const seed = this.seed;
     const count = 5;
@@ -1058,8 +1122,9 @@ export class World {
       const iy = 60 + Math.round(hash2(i, 3, seed + 843) * 10);
       const rad = 3 + Math.floor(hash2(i, 4, seed + 844) * 3);
       const zone = this.zoneAt(ix, iz);
-      const topId = zone === ZONE.VOLCANO ? B.BASALT : zone === ZONE.RADIATION ? B.INF_GRASS : B.GRASS;
-      const soilId = zone === ZONE.VOLCANO ? B.BASALT : zone === ZONE.RADIATION ? B.INF_DIRT : B.DIRT;
+      const crystal = zone === ZONE.CRYSTAL;
+      const topId = zone === ZONE.VOLCANO ? B.BASALT : zone === ZONE.RADIATION ? B.INF_GRASS : crystal ? B.CRYSTAL : B.GRASS;
+      const soilId = zone === ZONE.VOLCANO ? B.BASALT : zone === ZONE.RADIATION ? B.INF_DIRT : crystal ? B.STONE : B.DIRT;
       const deepId = zone === ZONE.VOLCANO ? B.BASALT : zone === ZONE.RADIATION ? B.INF_STONE : B.STONE;
       this.floatingIslands.push({ x: ix, y: iy, z: iz, r: rad });
 
@@ -1080,14 +1145,14 @@ export class World {
       }
 
       // a little tree or rock cluster
-      if (zone !== ZONE.VOLCANO && rad >= 4) {
+      if (zone !== ZONE.VOLCANO && zone !== ZONE.CRYSTAL && rad >= 4) {
         this.tree(ix + 1, iy + 1, iz - 1);
       } else {
         for (const [ox, oz] of [[-2, 1], [2, -1], [1, 2]]) {
-          this.setRaw(ix + ox, iy + 1, iz + oz, zone === ZONE.VOLCANO ? B.OBSIDIAN : B.INF_STONE);
+          this.setRaw(ix + ox, iy + 1, iz + oz, zone === ZONE.VOLCANO ? B.OBSIDIAN : zone === ZONE.CRYSTAL ? B.CRYSTAL : B.INF_STONE);
         }
       }
-      if (i % 2 === 0) this.addLight(ix, iy + 2, iz, zone === ZONE.RADIATION ? 0x8aff6a : 0xffb144, 1.0);
+      if (i % 2 === 0) this.addLight(ix, iy + 2, iz, zone === ZONE.RADIATION ? 0x8aff6a : zone === ZONE.CRYSTAL ? 0x8ef0ff : 0xffb144, 1.0);
     }
   }
 
@@ -1305,12 +1370,31 @@ export class World {
       const y = this.surfaceY(x, z);
       if (y < 0 || y > 50 || blocked(x, z)) continue;
       const r = hash2(i, 4, this.seed + 57) > 0.55 ? 2 : 1;
+      const zone = this.zoneAt(x, z);
+      const boulderId = zone === ZONE.RADIATION ? B.INF_STONE
+        : zone === ZONE.VOLCANO ? B.BASALT
+        : zone === ZONE.CRYSTAL ? B.CRYSTAL : B.STONE;
       for (let ox = -r; ox <= r; ox++)
         for (let oz = -r; oz <= r; oz++)
           for (let oy = 0; oy <= r; oy++)
             if (hash2(x + ox, z + oz, this.seed + oy + 60) > 0.28)
-              this.setRaw(x + ox, y + 1 + oy, z + oz,
-                this.zoneAt(x, z) === ZONE.RADIATION ? B.INF_STONE : this.zoneAt(x, z) === ZONE.VOLCANO ? B.BASALT : B.STONE);
+              this.setRaw(x + ox, y + 1 + oy, z + oz, boulderId);
+    }
+
+    // кристаллы, растущие из земли
+    let spires = 0, tries = 0;
+    while (spires < 30 && tries++ < 4000) {
+      const x = 18 + Math.floor(hash2(spires, tries, this.seed + 90) * (SX - 36));
+      const z = 18 + Math.floor(hash2(tries, spires, this.seed + 91) * (SZ - 36));
+      if (this.zoneAt(x, z) !== ZONE.CRYSTAL) continue;
+      const y = this.surfaceY(x, z);
+      if (y < 0 || y > 52 || blocked(x, z)) continue;
+      const top = this.get(x, y, z);
+      if (top !== B.STONE && top !== B.CRYSTAL) continue;
+      const h = 1 + Math.floor(hash2(x, z, this.seed + 92) * 4);
+      for (let i = 0; i < h; i++) this.setRaw(x, y + 1 + i, z, B.CRYSTAL);
+      if (hash2(x, z, this.seed + 93) > 0.45) this.setRaw(x + 1, y + 1, z, B.CRYSTAL);
+      spires++;
     }
   }
 

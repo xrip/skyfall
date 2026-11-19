@@ -3650,6 +3650,7 @@ export class Game {
     const onWire = p.onGround && BLOCKS[belowId]?.hazard === 'wire';
     const inRad = zone === ZONE.RADIATION;
     const inVol = zone === ZONE.VOLCANO;
+    const inCry = zone === ZONE.CRYSTAL;
 
     let warning = '';
     let warningCls = '';
@@ -3669,15 +3670,16 @@ export class Game {
 
     const hint = inRad
       ? (hazmat >= 3 ? 'защита 100%' : `химзащита ${hazmat}/3`)
-      : inVol ? 'магма и базальт' : '—';
-    this.ui.setZone(ZONE_NAMES[zone], hint, inRad ? 'radiation' : inVol ? 'volcano' : '');
+      : inVol ? 'магма и базальт' : inCry ? 'кристаллы' : '—';
+    this.ui.setZone(ZONE_NAMES[zone], hint, inRad ? 'radiation' : inVol ? 'volcano' : inCry ? 'crystal' : '');
 
     if (this.baseFogColor) {
-      const hex = inRad ? this.theme?.zoneRad : inVol ? this.theme?.zoneVolcano : this.theme?.fog;
+      const hex = inRad ? this.theme?.zoneRad : inVol ? this.theme?.zoneVolcano : inCry ? 0x9fe0ff : this.theme?.fog;
       if (hex !== undefined) {
         this.zoneFogColor.setHex(hex);
         // вулкан только подкрашивает воздух, а не заливает экран красным
         if (inVol) this.zoneFogColor.lerp(this.baseFogColor, 0.55);
+        else if (inCry) this.zoneFogColor.lerp(this.baseFogColor, 0.25);
       }
     }
 
@@ -3721,11 +3723,11 @@ export class Game {
     }
 
     // ambient particles for dangerous zones
-    if (inRad || inVol) {
+    if (inRad || inVol || inCry) {
       this.zoneParticleTimer -= dt;
       if (this.zoneParticleTimer <= 0) {
-        this.zoneParticleTimer = inRad ? 0.06 : 0.09;
-        const color = inRad ? 0x8aff6a : 0xff8a3a;
+        this.zoneParticleTimer = inRad ? 0.06 : inVol ? 0.09 : 0.12;
+        const color = inRad ? 0x8aff6a : inVol ? 0xff8a3a : 0x8ef0ff;
         this.effects.spawn(
           p.pos.x + rand(-7, 7), p.pos.y + rand(0.2, 4.2), p.pos.z + rand(-7, 7),
           color, 1, { speed: 0.35, up: rand(0.1, 0.6), size: 0.065, life: 1.5, solid: false }
@@ -3747,6 +3749,10 @@ export class Game {
     }
     if (zone === ZONE.VOLCANO && this.zoneFeedCd <= 0) {
       this.ui.feed('<b>ВУЛКАНИЧЕСКАЯ ЗОНА</b> · берегитесь магмы', true);
+      this.zoneFeedCd = 12;
+    }
+    if (zone === ZONE.CRYSTAL && this.zoneFeedCd <= 0) {
+      this.ui.feed('<b>КРИСТАЛЬНАЯ ЗОНА</b> · кристаллы растут из земли', true);
       this.zoneFeedCd = 12;
     }
   }

@@ -325,12 +325,27 @@ const TILE_PAINTERS = {
     g.fillRect(3, 4, 1, 6);
     g.fillRect(11, 8, 1, 5);
   },
+
+  crystal(g, rng) {
+    g.fillStyle = 'rgb(22,48,60)';
+    g.fillRect(0, 0, 16, 16);
+    speck(g, rng, [34, 84, 104], 24, 14);
+    g.fillStyle = 'rgb(96,214,240)';
+    g.fillRect(3, 2, 4, 12);
+    g.fillRect(9, 5, 4, 9);
+    g.fillStyle = 'rgb(190,250,255)';
+    g.fillRect(4, 3, 1, 8);
+    g.fillRect(10, 6, 1, 6);
+    g.fillStyle = 'rgb(58,132,158)';
+    g.fillRect(0, 0, 16, 1);
+    g.fillRect(0, 15, 16, 1);
+  },
 };
 
 const TILE_ORDER = [
   'dirt', 'grass_top', 'grass_side', 'stone', 'brick', 'log_top', 'log_side',
   'planks', 'metal', 'sand', 'obsidian', 'leaves', 'rust', 'basalt', 'magma',
-  'red_brick', 'hay', 'wire',
+  'red_brick', 'hay', 'wire', 'crystal',
 ];
 
 export function createAtlas() {

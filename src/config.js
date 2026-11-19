@@ -143,8 +143,8 @@ export const SKY_THEMES = [
   },
 ];
 
-export const ZONE = { NORMAL: 0, VOLCANO: 1, RADIATION: 2 };
-export const ZONE_NAMES = ['ОБЫЧНАЯ ЗОНА', 'ВУЛКАНИЧЕСКАЯ ЗОНА', 'ЗОНА РАДИАЦИИ'];
+export const ZONE = { NORMAL: 0, VOLCANO: 1, RADIATION: 2, CRYSTAL: 3 };
+export const ZONE_NAMES = ['ОБЫЧНАЯ ЗОНА', 'ВУЛКАНИЧЕСКАЯ ЗОНА', 'ЗОНА РАДИАЦИИ', 'КРИСТАЛЬНАЯ ЗОНА'];
 export const HAZARD = { magmaDps: 14, radiationDps: 9, tick: 0.5 };
 
 /* ------------------------------------------------------------------
@@ -266,6 +266,7 @@ export const B = {
   RED_BRICK: 25,
   HAY: 26,
   WIRE: 27,
+  CRYSTAL: 28,
 };
 
 export const BLOCKS = {
@@ -302,6 +303,9 @@ export const BLOCKS = {
   [B.RED_BRICK]:    { name: 'Красный кирпич', tiles: { all: 'red_brick' }, hardness: 1.1, color: '#a33b32', tintKind: 'stone', collectible: true },
   [B.HAY]:          { name: 'Сноп сена', tiles: { all: 'hay' }, hardness: 0.35, color: '#d9b44a', tintKind: 'grass', collectible: true },
   [B.WIRE]:         { name: 'Колючая проволока', tiles: { all: 'wire' }, hardness: 0.55, color: '#8c9199', tintKind: 'metal', collectible: true, hazard: 'wire' },
+
+  /* crystal zone */
+  [B.CRYSTAL]:      { name: 'Кристалл', tiles: { all: 'crystal' }, hardness: 0.9, color: '#5fe8ff', tintKind: 'stone', collectible: true },
 };
 
 /* Blocks available in the hotbar (slots 2..6) */
@@ -309,7 +313,7 @@ export const HOTBAR_BLOCKS = [B.STONE, B.PLANKS, B.BRICK, B.METAL, B.OBSIDIAN];
 export const START_BLOCKS = [B.STONE, B.PLANKS, null, null, null];
 export const INVENTORY_BLOCKS = [
   B.DIRT, B.STONE, B.BRICK, B.LOG, B.PLANKS, B.METAL, B.SAND, B.OBSIDIAN, B.LEAVES, B.RUST,
-  B.RED_BRICK, B.HAY, B.WIRE,
+  B.RED_BRICK, B.HAY, B.WIRE, B.CRYSTAL,
 ];
 
 export const SLOT = {
