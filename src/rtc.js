@@ -119,6 +119,9 @@ function gather(pc, ms) {
 export class RtcLink {
   constructor(handlers) {
     this.h = handlers || {};
+    this.peers = new Map();
+    this.peerId = null;
+    this.playerId = null;
     this.code = null;
     this.token = null;
     this.turn = null;
@@ -158,6 +161,7 @@ export class RtcLink {
   }
 
   apply(room, role) {
+    this.playerId = room.playerId ?? null;
     this.code = room.code;
     this.token = room.token;
     this.turn = room.turn || null;
@@ -187,17 +191,44 @@ export class RtcLink {
       }
       if (this.dead) break;
       if (typeof r.seq === 'number') this.seq = r.seq;
+      if (this.role === 'host' && Array.isArray(r.players)) this.syncPeers(r.players);
       if (Array.isArray(r.msgs)) for (const m of r.msgs) this.onSignal(m);
       if (r.closed) { this.roomGone(); return; }
-      if (this.role === 'host' && Number(r.session) > this.session) {
+      if (this.role === 'host' && !Array.isArray(r.players) && Number(r.session) > this.session) {
         this.session = Number(r.session);
         this.negotiate();
       }
-      await sleep(this.open ? 6000 : 500);
+      await sleep(this.open && this.role !== 'host' ? 6000 : 500);
+    }
+  }
+
+  syncPeers(ids) {
+    for (const [id, peer] of this.peers) {
+      if (ids.includes(id)) continue;
+      const wasOpen = peer.open;
+      peer.finish();
+      this.peers.delete(id);
+      if (wasOpen) this.h.onPeerLost?.(id);
+    }
+    for (const id of ids) {
+      if (this.peers.has(id)) continue;
+      const peer = new RtcLink({
+        onOpen: () => this.h.onOpen?.(id),
+        onPeerLost: () => this.h.onPeerLost?.(id),
+        onMessage: (text) => this.h.onMessage?.(text, id),
+      });
+      peer.apply(this, 'host');
+      peer.peerId = id;
+      this.peers.set(id, peer);
+      peer.negotiate();
     }
   }
 
   onSignal(msg) {
+    if (this.role === 'host' && this.peerId === null && this.peers.has(msg?.from)) {
+      this.peers.get(msg.from).onSignal(msg);
+      return;
+    }
     const d = msg && msg.data;
     if (!d || typeof d !== 'object') return;
     if (d.k === 'offer' && this.role === 'guest') this.acceptOffer(d).catch(() => {});
@@ -206,7 +237,7 @@ export class RtcLink {
 
   signal(data) {
     if (this.dead || !this.code || !this.token) return Promise.resolve();
-    return api('POST', SIG + '/' + this.code + '/signal?token=' + encodeURIComponent(this.token), { data })
+    return api('POST', SIG + '/' + this.code + '/signal?token=' + encodeURIComponent(this.token), { data, to: this.peerId })
       .catch(() => { /* следующая попытка всё равно будет */ });
   }
 
@@ -321,7 +352,13 @@ export class RtcLink {
 
   /* ---------- передача ---------- */
 
-  send(text, fast = false) {
+  send(text, fast = false, target = null) {
+    if (this.peers.size) {
+      if (target !== null) return this.peers.get(target)?.send(text, fast) ?? false;
+      let sent = false;
+      for (const peer of this.peers.values()) sent = peer.send(text, fast) || sent;
+      return sent;
+    }
     let ch = null;
     if (fast && this.fast && this.fast.readyState === 'open') ch = this.fast;
     else if (this.dc && this.dc.readyState === 'open') ch = this.dc;
@@ -367,6 +404,8 @@ export class RtcLink {
   }
 
   finish() {
+    for (const peer of this.peers.values()) peer.finish();
+    this.peers.clear();
     this.dead = true;
     this.closePeer(false);
   }
@@ -375,6 +414,8 @@ export class RtcLink {
     if (this.dead) return;
     this.dead = true;
     clearTimeout(this._retry);
+    for (const peer of this.peers.values()) peer.finish();
+    this.peers.clear();
     const code = this.code;
     const token = this.token;
     this.closePeer(false);

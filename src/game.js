@@ -157,6 +157,7 @@ export class Game {
     this.peerJoined = false;
     this.remote = { pos: new THREE.Vector3(), yaw: 0, hp: 100, alive: true, ready: false };
     this.avatar = null;
+    this.coopPlayers = new Map();
     this.netSnapTimer = 0;
     this.netPosTimer = 0;
     this.lastSnap = null;
@@ -720,6 +721,12 @@ export class Game {
     this.resetInventoryUi();
     this.remote.alive = true;
     this.remote.ready = false;
+    for (const player of this.coopPlayers.values()) {
+      player.avatar?.dispose();
+      player.avatar = null;
+      player.alive = true;
+      player.ready = false;
+    }
     if (this.avatar) this.avatar.group.visible = false;
     this.player.reset();
     if (this.runMode === 'sandbox') this.player.grantSandbox();
@@ -1356,19 +1363,26 @@ export class Game {
     this.ui.setHudVisible(false);
   }
 
-  onPeerJoined() {
+  onPeerJoined(id) {
+    if (id != null && !this.coopPlayers.has(id)) this.coopPlayers.set(id, { pos: new THREE.Vector3(), yaw: 0, hp: 100, alive: true, ready: false });
     this.peerJoined = true;
     this.setCoopStatus('host-status', 'Друг подключён. Можно начинать.', 'ok');
     this.ui.feed('<b>Друг подключился</b>');
     this.sendCoopSettings();
     if (this.runActive) {
-      this.sendWelcome();
+      this.sendWelcome(id);
       if (this.inventoryOpen) this.net.send({ t: 'inv', open: true });
       this.ui.feed('<b>Друг в игре</b> · удачной охоты');
     }
   }
 
   onPeerLeft(msg) {
+    if (msg.id != null) {
+      this.coopPlayers.get(msg.id)?.avatar?.dispose();
+      this.coopPlayers.delete(msg.id);
+      this.net.send({ t: "playerLeft", id: msg.id });
+      if (this.coopPlayers.size) return;
+    }
     this.peerJoined = false;
     this.ui.setFriend('', 0, 100, false, false);
     this.removeAvatar();
@@ -1430,6 +1444,8 @@ export class Game {
   }
 
   removeAvatar() {
+    for (const player of this.coopPlayers.values()) player.avatar?.dispose();
+    this.coopPlayers.clear();
     if (this.avatar) {
       this.avatar.dispose();
       this.avatar = null;
@@ -1437,9 +1453,9 @@ export class Game {
     this.remote.ready = false;
   }
 
-  sendWelcome() {
+  sendWelcome(target = null) {
     if (!this.net.peer || this.netRole !== 'host') return;
-    if (!this.avatar) this.avatar = new PlayerAvatar(this, 'ДРУГ');
+    if (!this.coopPlayers.size && !this.avatar) this.avatar = new PlayerAvatar(this, 'ДРУГ');
     const edits = [];
     for (const [key, id] of this.world.edits) {
       const [x, y, z] = key.split(',').map(Number);
@@ -1472,8 +1488,8 @@ export class Game {
       state: this.state,
       alien: this.alien ? [+this.alien.pos.x.toFixed(2), +this.alien.pos.y.toFixed(2), +this.alien.pos.z.toFixed(2)] : null,
       dungeon: this.dungeonActive ? this.dungeonSeed : null,
-    });
-    if (this.remote.ready) {
+    }, target);
+    if (this.remote.ready && this.avatar) {
       this.avatar.setState(this.remote.pos.x, this.remote.pos.y, this.remote.pos.z, this.remote.yaw, this.remote.alive);
     }
     this.ui.setFriend('ДРУГ', this.remote.hp, 100, this.remote.alive, true);
@@ -1674,6 +1690,7 @@ export class Game {
         this.ui.setFriend('ДРУГ', this.remote.hp, 100, this.remote.alive, true);
       }
       if (this.avatar) this.avatar.update(dt);
+      for (const player of this.coopPlayers.values()) player.avatar?.update(dt);
       if (this.respawnTimer > 0) {
         this.respawnTimer -= dt;
         if (this.respawnTimer <= 0) this.respawnLocal();
@@ -1692,6 +1709,7 @@ export class Game {
         });
       }
       if (this.avatar) this.avatar.update(dt);
+      for (const player of this.coopPlayers.values()) player.avatar?.update(dt);
       if (this.remote.ready) this.ui.setFriend('ХОЗЯИН', this.remote.hp, 100, this.remote.alive, true);
       if (this.respawnTimer > 0) {
         this.respawnTimer -= dt;
@@ -1700,8 +1718,23 @@ export class Game {
     }
   }
 
-  onNetMessage(msg) {
-    if (!msg || !msg.t) return;
+  onNetMessage(msg, id) {
+    if (!msg?.t) return;
+    if (this.netRole === "guest" && msg.t === "playerLeft") {
+      this.coopPlayers.get(msg.id)?.avatar?.dispose();
+      this.coopPlayers.delete(msg.id);
+      return;
+    }
+    if (this.netRole === "guest" && msg.t === "playerState") {
+      if (msg.id === this.net.link?.playerId) return;
+      let peer = this.coopPlayers.get(msg.id);
+      if (!peer) {
+        peer = { avatar: new PlayerAvatar(this, "ДРУГ") };
+        this.coopPlayers.set(msg.id, peer);
+      }
+      peer.avatar.setState(...msg.p, msg.yaw, msg.alive);
+      return;
+    }
     if (msg.t === 'inv') {
       this.onRemoteInventory(!!msg.open, msg.kind === 'shop' ? 'shop' : msg.kind === 'bench' ? 'bench' : msg.kind === 'alien' ? 'alien' : 'inventory');
       return;
@@ -1709,29 +1742,34 @@ export class Game {
     if (this.netRole === 'host') {
       if (msg.t === 'pos') {
         if (!Array.isArray(msg.p)) return;
-        this.remote.pos.set(msg.p[0], msg.p[1], msg.p[2]);
-        this.remote.yaw = msg.yaw || 0;
-        this.remote.hp = msg.hp ?? 100;
-        const wasAlive = this.remote.alive;
-        this.remote.alive = msg.alive !== false;
-        this.remote.ready = true;
-        if (this.avatar) this.avatar.setState(msg.p[0], msg.p[1], msg.p[2], msg.yaw || 0, this.remote.alive);
-        this.ui.setFriend('ДРУГ', this.remote.hp, 100, this.remote.alive, true);
-        if (wasAlive && !this.remote.alive && !this.player.alive) this.coopWipe();
+        const remote = this.coopPlayers.get(id) || this.remote;
+        remote.pos.set(msg.p[0], msg.p[1], msg.p[2]);
+        remote.yaw = msg.yaw || 0;
+        remote.hp = msg.hp ?? 100;
+        remote.alive = msg.alive !== false;
+        remote.ready = true;
+        if (id != null) {
+          remote.avatar ||= new PlayerAvatar(this, "ДРУГ");
+          this.net.send({ t: "playerState", id, p: remote.pos.toArray(), yaw: remote.yaw, alive: remote.alive });
+        }
+        (remote.avatar || this.avatar)?.setState(...remote.pos.toArray(), remote.yaw, remote.alive);
+        this.ui.setFriend("ДРУГ", remote.hp, 100, remote.alive, true);
+        if (!this.player.alive && !this.getMobTargets().some(player => player.alive)) this.coopWipe();
         return;
       }
       if (msg.t === 'hit') {
         const mob = this.mobs.find(m => m.id === msg.id);
         if (mob && !mob.dead) {
           const p = new THREE.Vector3(mob.pos.x, mob.pos.y + mob.cfg.height * 0.6, mob.pos.z);
-          mob.lastHitBy = 'guest';
-          mob.takeDamage(msg.dmg, p, !!msg.head, 'guest');
+          mob.lastHitBy = id ?? 'guest';
+          mob.takeDamage(msg.dmg, p, !!msg.head, id ?? 'guest');
           this.effects.bloodBurst(p.x, p.y, p.z, 0x77e06a, msg.head ? 10 : 5);
         }
         return;
       }
       if (msg.t === 'block') {
         this.applyBlockFromNet(msg.x, msg.y, msg.z, msg.id);
+        for (const peerId of this.coopPlayers.keys()) if (peerId !== id) this.net.send(msg, peerId);
         return;
       }
       if (msg.t === 'chestOpened') {
@@ -1741,6 +1779,21 @@ export class Game {
           this.chestsLooted++;
           this.ui.updateChests(this.chestTotal, this.chestsLooted);
           this.ui.feed('Друг забрал лут из сундука');
+          for (const peerId of this.coopPlayers.keys()) if (peerId !== id) this.net.send({ t: 'chestLooted', i: msg.i }, peerId);
+        }
+        return;
+      }
+      if (msg.t === 'dead' && id != null) {
+        const remote = this.coopPlayers.get(id);
+        if (remote) remote.alive = false;
+        if (!this.player.alive && !this.getMobTargets().some(player => player.alive)) this.coopWipe();
+        return;
+      }
+      if (msg.t === 'respawn' && id != null) {
+        const player = this.coopPlayers.get(id);
+        if (player) {
+          player.alive = true;
+          if (Array.isArray(msg.p)) player.pos.fromArray(msg.p);
         }
         return;
       }
@@ -1760,7 +1813,7 @@ export class Game {
         return;
       }
       if (msg.t === 'ready') {
-        this.sendWelcome();
+        this.sendWelcome(id);
         return;
       }
       return;
@@ -1805,7 +1858,7 @@ export class Game {
         return;
       }
       if (msg.t === 'mobDied') {
-        this.removeNetMob(msg.id, msg.by, msg.voided);
+        this.removeNetMob(msg.id, msg.by === this.net.link?.playerId ? "guest" : typeof msg.by === "number" ? "other" : msg.by, msg.voided);
         return;
       }
       if (msg.t === 'pickup') {
@@ -1937,23 +1990,28 @@ export class Game {
     if (this.netRole === 'host' && this.peerJoined && this.remote.ready) {
       list.push({ pos: this.remote.pos, alive: this.remote.alive, remote: true });
     }
+    if (this.netRole === 'host') {
+      for (const [id, player] of this.coopPlayers) {
+        if (player.ready) list.push({ pos: player.pos, alive: player.alive, remote: true, id });
+      }
+    }
     return list;
   }
 
   damageTarget(target, amount, source, name) {
     if (!target) return;
-    if (target.remote) this.hurtRemote(amount, source, name);
+    if (target.remote) this.hurtRemote(amount, source, name, target.id);
     else this.damagePlayer(amount, source, name);
   }
 
-  hurtRemote(amount, source, name) {
+  hurtRemote(amount, source, name, id = null) {
     if (this.netRole !== 'host' || !this.peerJoined) return;
     this.net.send({
       t: 'hurt',
       dmg: amount,
       from: source ? [source.x, source.y, source.z] : null,
       name,
-    });
+    }, id);
   }
 
   coopWipe() {
@@ -1979,7 +2037,7 @@ export class Game {
     if (this.netRole === 'guest') {
       this.net.send({ t: 'dead' });
     } else if (this.netRole === 'host') {
-      if (this.remote.ready && !this.remote.alive) this.coopWipe();
+      if (!this.getMobTargets().some(player => player.remote && player.alive)) this.coopWipe();
       else if (this.peerJoined) this.net.send({ t: 'event', kind: 'friendDown' });
     }
   }
@@ -2127,10 +2185,11 @@ export class Game {
       this.damagePlayer(dmg, boss.pos, 'УДАРНАЯ ВОЛНА');
       this.player.vel.y = Math.max(this.player.vel.y, 5);
     }
-    if (this.netRole === 'host' && this.peerJoined && this.remote.ready && this.remote.alive) {
-      const rd = Math.hypot(this.remote.pos.x - boss.pos.x, this.remote.pos.z - boss.pos.z);
-      if (rd < rad && Math.abs(this.remote.pos.y - boss.pos.y) < 4) {
-        this.hurtRemote(dmg, boss.pos, 'УДАРНАЯ ВОЛНА');
+    for (const player of this.getMobTargets()) {
+      if (!player.remote || !player.alive) continue;
+      const distance = Math.hypot(player.pos.x - boss.pos.x, player.pos.z - boss.pos.z);
+      if (distance < rad && Math.abs(player.pos.y - boss.pos.y) < 4) {
+        this.hurtRemote(dmg, boss.pos, 'УДАРНАЯ ВОЛНА', player.id);
       }
     }
   }
@@ -2899,6 +2958,7 @@ export class Game {
     toggle(this.alien);
     for (const b of this.benches) toggle(b);
     toggle(this.avatar);
+    for (const player of this.coopPlayers.values()) toggle(player.avatar);
   }
 
   enterDungeon(seed = null, fromNet = false) {
@@ -3596,9 +3656,7 @@ export class Game {
       return d < AIRSHIP.raidRadius && Math.abs(pos.y - (a.deckY + 2)) < 14;
     };
     let entered = near(this.player.pos);
-    if (!entered && this.netRole === 'host' && this.peerJoined && this.remote.ready) {
-      entered = near(this.remote.pos);
-    }
+    if (!entered) entered = this.getMobTargets().some(player => player.remote && player.alive && near(player.pos));
     if (!entered) return;
     this.airshipRaided = true;
     const extra = this.difficultyId === 'nightmare' ? 5 : this.difficultyId === 'hard' ? 3 : 0;

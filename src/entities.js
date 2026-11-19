@@ -483,8 +483,11 @@ export class Mob {
     this.id = ++game.nextEntityId;
     this.pos = new THREE.Vector3(pos.x, pos.y, pos.z);
     this.vel = new THREE.Vector3();
-    this.hp = this.cfg.hp;
-    this.maxHp = this.cfg.hp;
+    // Guests get the authoritative health from the host's mob snapshot.
+    const guestCount = game.netRole === 'host' ? (game.coopPlayers.size || Number(game.peerJoined)) : 0;
+    const healthMultiplier = [1, 1.33, 1.66, 2][guestCount];
+    this.maxHp = Math.round(this.cfg.hp * healthMultiplier);
+    this.hp = this.maxHp;
     this.dead = false;
     this.yaw = 0;
     this.attackCd = 0.6 + Math.random() * 0.5;

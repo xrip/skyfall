@@ -83,25 +83,25 @@ export class Net {
         this.game.onJoined(code);
       },
       onStatus: (text) => this.status(text),
-      onOpen: () => {
+      onOpen: (id) => {
         this.peer = true;
         if (this.role === 'host') {
           this.status('Прямое соединение установлено. Можно начинать.');
-          this.game.onPeerJoined('guest');
+          this.game.onPeerJoined(id);
         } else {
           this.status('Прямое соединение установлено. Ждём старта хозяина…');
         }
       },
-      onPeerLost: () => {
-        this.peer = false;
-        this.game.onPeerLeft({ hostLeft: this.role === 'guest' });
+      onPeerLost: (id) => {
+        this.peer = [...(this.link?.peers.values() || [])].some(peer => peer.open);
+        this.game.onPeerLeft({ id, hostLeft: this.role === 'guest' });
       },
       onRoomClosed: () => {
         this.peer = false;
         this.game.onPeerLeft({ hostLeft: true });
       },
       onError: (msg) => this.game.onNetError(msg),
-      onMessage: (text) => this.onText(text),
+      onMessage: (text, id) => this.onText(text, id),
     };
   }
 
@@ -130,7 +130,7 @@ export class Net {
 
   /* ================= сообщения ================= */
 
-  dispatch(msg) {
+  dispatch(msg, id) {
     switch (msg.t) {
       case 'hosted':
         this.role = 'host';
@@ -154,52 +154,53 @@ export class Net {
         this.game.onNetError(msg.msg || 'Ошибка соединения');
         break;
       default:
-        this.game.onNetMessage(msg);
+        this.game.onNetMessage(msg, id);
     }
   }
 
-  onText(text) {
+  onText(text, id) {
     let msg;
     try { msg = JSON.parse(text); } catch (e) { return; }
     if (!msg || typeof msg !== 'object') return;
-    if (msg.t === '__p') { this.onChunk(msg); return; }
-    this.dispatch(msg);
+    if (msg.t === '__p') { this.onChunk(msg, id); return; }
+    this.dispatch(msg, id);
   }
 
   // Крупные пакеты (welcome с правками мира) режем на куски: у SCTP есть
   // ограничение на размер одного сообщения.
-  onChunk(m) {
+  onChunk(m, id) {
+    const key = id + ":" + m.id;
     if (!m.id || typeof m.i !== 'number' || typeof m.n !== 'number') return;
-    let buf = this._chunks.get(m.id);
+    let buf = this._chunks.get(key);
     if (!buf) {
       buf = { parts: new Array(m.n), got: 0, size: 0 };
-      this._chunks.set(m.id, buf);
+      this._chunks.set(key, buf);
     }
     if (buf.parts[m.i] === undefined) {
       buf.parts[m.i] = m.d || '';
       buf.got++;
       buf.size += buf.parts[m.i].length;
     }
-    if (buf.size > 8 * 1024 * 1024) { this._chunks.delete(m.id); return; }
+    if (buf.size > 8 * 1024 * 1024) { this._chunks.delete(key); return; }
     if (buf.got < m.n) return;
-    this._chunks.delete(m.id);
-    this.onText(buf.parts.join(''));
+    this._chunks.delete(key);
+    this.onText(buf.parts.join(''), id);
   }
 
-  send(msg) {
+  send(msg, target = null) {
     if (!msg) return false;
     const text = JSON.stringify(msg);
     const fast = msg.t === 'pos';
 
     if (this.transport === 'p2p' && this.link) {
-      if (text.length <= CHUNK) return this.link.send(text, fast);
+      if (text.length <= CHUNK) return this.link.send(text, fast, target);
       if (fast) return false;
       const id = (++this._chunkId).toString(36) + Date.now().toString(36).slice(-4);
       const total = Math.ceil(text.length / CHUNK);
       for (let i = 0; i < total; i++) {
         const ok = this.link.send(JSON.stringify({
           t: '__p', id, i, n: total, d: text.slice(i * CHUNK, (i + 1) * CHUNK),
-        }), false);
+        }), false, target);
         if (!ok) return false;
       }
       return true;

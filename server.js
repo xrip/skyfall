@@ -74,7 +74,7 @@ async function handleApi(req, res, path, query) {
     const room = {
       code,
       host: crypto.randomBytes(16).toString('hex'),
-      guest: null,
+      guests: new Map(),
       session: 0,
       msgs: [],
       seq: 0,
@@ -98,16 +98,16 @@ async function handleApi(req, res, path, query) {
   if (action === 'join') {
     if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
     if (room.closed) { sendJson(res, 410, { error: 'Комната закрыта' }); return; }
-    if (room.guest) { sendJson(res, 409, { error: 'В комнате уже двое' }); return; }
-    room.guest = crypto.randomBytes(16).toString('hex');
-    room.session++;
-    room.msgs = [];
-    sendJson(res, 200, await withTurn({ code, token: room.guest, role: 'guest', seq: room.seq, session: room.session }));
+    if (room.guests.size >= 3) { sendJson(res, 409, { error: 'В комнате уже четверо' }); return; }
+    const guestToken = crypto.randomBytes(16).toString('hex');
+    const playerId = ++room.session;
+    room.guests.set(guestToken, playerId);
+    sendJson(res, 200, await withTurn({ code, token: guestToken, playerId, role: 'guest', seq: room.seq, session: room.session }));
     return;
   }
 
   const token = query.get('token');
-  if (!token || (token !== room.host && token !== room.guest)) {
+  if (!token || (token !== room.host && !room.guests.has(token))) {
     sendJson(res, 403, { error: 'Нет доступа к комнате' });
     return;
   }
@@ -115,25 +115,29 @@ async function handleApi(req, res, path, query) {
   if (action === 'signal') {
     if (req.method !== 'POST') { sendJson(res, 405, { error: 'Только POST' }); return; }
     const body = await readJsonBody(req);
+    const from = token === room.host ? 'host' : room.guests.get(token);
+    const to = from === 'host' ? body?.to : 'host';
+    if (from === 'host' && ![...room.guests.values()].includes(to)) { sendJson(res, 404, { error: 'Игрок не найден' }); return; }
     room.seq++;
     room.msgs.push({
       n: room.seq,
-      from: token === room.host ? 'host' : 'guest',
+      from, to,
       data: body && body.data !== undefined ? body.data : null,
     });
-    if (room.msgs.length > 40) room.msgs.splice(0, room.msgs.length - 40);
+    if (room.msgs.length > 120) room.msgs.splice(0, room.msgs.length - 120);
     sendJson(res, 200, { ok: true, seq: room.seq });
     return;
   }
 
   if (action === 'poll') {
     const since = Number(query.get('since')) || 0;
-    const me = token === room.host ? 'host' : 'guest';
+    const me = token === room.host ? 'host' : room.guests.get(token);
     sendJson(res, 200, {
       seq: room.seq,
-      msgs: room.msgs.filter((msg) => msg.n > since && msg.from !== me),
+      msgs: room.msgs.filter((msg) => msg.n > since && msg.to === me),
       session: room.session,
-      guest: !!room.guest,
+      guest: room.guests.size > 0,
+      players: [...room.guests.values()],
       closed: room.closed,
     });
     return;
@@ -145,8 +149,7 @@ async function handleApi(req, res, path, query) {
       room.closed = true;
       setTimeout(() => signals.delete(code), 30000);
     } else {
-      room.guest = null;
-      room.msgs = [];
+      room.guests.delete(token);
     }
     sendJson(res, 200, { ok: true });
     return;

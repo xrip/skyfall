@@ -42,6 +42,20 @@ test('VPS server supports cross-origin rooms, TURN credentials, and authenticate
   const guest = await (await request(`/api/rooms/${host.code}/join`, 'POST', {})).json();
   assert.notEqual(guest.token, host.token);
   assert.notEqual(guest.turn.username, host.turn.username);
+  const roomPath = '/api/rooms/' + host.code;
+  const second = await (await request(roomPath + '/join', 'POST', {})).json();
+  const third = await (await request(roomPath + '/join', 'POST', {})).json();
+  assert.equal((await request(roomPath + '/join', 'POST', {})).status, 409);
+  assert.equal(new Set([guest.playerId, second.playerId, third.playerId]).size, 3);
+  assert.equal((await request(roomPath + '/signal?token=' + host.token, 'POST', {
+    to: second.playerId, data: { k: 'offer' },
+  })).status, 200);
+  const targeted = await (await request(roomPath + '/poll?token=' + second.token)).json();
+  assert.deepEqual(targeted.msgs.map(msg => msg.data.k), ['offer']);
+  assert.deepEqual((await (await request(roomPath + '/poll?token=' + third.token)).json()).msgs, []);
+  assert.equal((await request(roomPath + '/leave?token=' + third.token, 'POST', {})).status, 200);
+  const replacement = await (await request(roomPath + '/join', 'POST', {})).json();
+  assert.ok(replacement.playerId > third.playerId);
   assert.equal((await request(`/api/rooms/${host.code}/signal?token=wrong`, 'POST', {})).status, 403);
   assert.equal((await request(`/api/rooms/${host.code}/signal?token=${guest.token}`, 'POST', { data: { k: 'answer', test: true } })).status, 200);
   const poll = await (await request(`/api/rooms/${host.code}/poll?token=${host.token}`)).json();
