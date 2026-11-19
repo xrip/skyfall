@@ -120,8 +120,10 @@ export class World {
     const seed = this.seed;
     const TAU = Math.PI * 2;
     const offset = hash2(seed, 5, seed + 701) * TAU;
-    const wVol = 0.72 + hash2(seed, 3, seed + 703) * 0.28;
-    const wRad = 0.8 + hash2(seed, 4, seed + 704) * 0.3;
+    // в одном забеге только одна опасная зона: вулкан или радиация, 50/50
+    const volcano = hash2(seed, 7, seed + 705) < 0.5;
+    this.zoneType = volcano ? ZONE.VOLCANO : ZONE.RADIATION;
+    const width = 0.85 + hash2(seed, 3, seed + 703) * 0.35;
     for (let x = 0; x < SX; x++) {
       for (let z = 0; z < SZ; z++) {
         const dx = x - cx, dz = z - cz;
@@ -132,8 +134,7 @@ export class World {
           a = ((a % TAU) + TAU) % TAU;
           a += (fbm(x * 0.017, z * 0.017, seed + 702, 3) - 0.5) * 0.65;
           a = ((a % TAU) + TAU) % TAU;
-          if (a < wVol) zone = ZONE.VOLCANO;
-          else if (a < wVol + wRad) zone = ZONE.RADIATION;
+          if (a < width) zone = this.zoneType;
         }
         this.zones[x + z * SX] = zone;
       }
@@ -301,6 +302,18 @@ export class World {
     ];
     const placed = [];
 
+    // только 6 локаций за забег; опасная — та, что совпадает с зоной
+    const zoneType = this.zoneType === ZONE.VOLCANO ? ZONE.VOLCANO : ZONE.RADIATION;
+    const normal = specs.filter((s) => s.zone === ZONE.NORMAL);
+    const special = specs.find((s) => s.zone === zoneType);
+    const order = normal.slice();
+    for (let k = order.length - 1; k > 0; k--) {
+      const j = Math.floor(hash2(k, order.length, seed + 730) * (k + 1));
+      const tmp = order[k]; order[k] = order[j]; order[j] = tmp;
+    }
+    const chosen = order.slice(0, 5);
+    if (special) chosen.push(special);
+
     const fits = (x, z, spec) => {
       if (this.zoneAt(x, z) !== spec.zone) return false;
       const y = this.surfaceY(x, z);
@@ -315,8 +328,8 @@ export class World {
       return true;
     };
 
-    for (let i = 0; i < specs.length; i++) {
-      const spec = specs[i];
+    for (let i = 0; i < chosen.length; i++) {
+      const spec = chosen[i];
       let spot = null;
       for (let attempt = 0; attempt < 420 && !spot; attempt++) {
         const a = hash2(i, attempt, seed + 721) * Math.PI * 2;
@@ -341,7 +354,7 @@ export class World {
       }
       if (!spot) {
         // last resort: ring point, still deterministic
-        const a = (i / specs.length) * Math.PI * 2;
+        const a = (i / chosen.length) * Math.PI * 2;
         const x = Math.round(cx + Math.cos(a) * (spec.minR + 8));
         const z = Math.round(cz + Math.sin(a) * (spec.minR + 8));
         spot = { x, z };

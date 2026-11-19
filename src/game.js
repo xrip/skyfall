@@ -189,7 +189,7 @@ export class Game {
     this.updateHotbar();
     this.updateHealth();
     this.updateAmmo();
-    this.ui.updateChests(CHEST_COUNT, 0);
+    this.ui.updateChests(this.chestTotal, 0);
     this.ui.setWave('СБОР', 'ПОДГОТОВКА', 'Соберите лут и постройте укрепления', '00:46', false);
     this.camera.position.set(ISLAND_CENTER.x + 190, 104, ISLAND_CENTER.z + 190);
     this.camera.lookAt(ISLAND_CENTER.x, 32, ISLAND_CENTER.z);
@@ -461,6 +461,11 @@ export class Game {
     }
   }
 
+  get chestTotal() {
+    const n = this.world && this.world.chests ? this.world.chests.length : 0;
+    return n || CHEST_COUNT;
+  }
+
   createChests() {
     for (const c of this.chests) c.dispose();
     this.chests = [];
@@ -698,7 +703,7 @@ export class Game {
     if (this.runMode === 'sandbox') this.player.grantSandbox();
     this.spawnPlayer();
     this.updateScrollHint();
-    this.ui.updateChests(CHEST_COUNT, 0);
+    this.ui.updateChests(this.chestTotal, 0);
     this.ui.updateHealth(this.player);
     this.ui.updateHotbar(this.player);
     this.ui.setAmmo(this.player);
@@ -898,7 +903,7 @@ export class Game {
       $('stat-waves').textContent = `${victory ? 3 : Math.max(0, this.waveIndex + (this.phase === 'wave' ? 1 : 0))} / 3`;
     }
     $('stat-kills').textContent = String(this.kills);
-    $('stat-chests').textContent = `${this.chestsLooted} / ${CHEST_COUNT}`;
+    $('stat-chests').textContent = `${this.chestsLooted} / ${this.chestTotal}`;
     $('stat-blocks').textContent = `${this.player.stats.placed} / ${this.player.stats.mined}`;
     const acc = this.player.stats.shots > 0 ? Math.min(100, Math.round((this.player.stats.hits / this.player.stats.shots) * 100)) : 0;
     $('stat-acc').textContent = acc + '%';
@@ -1145,6 +1150,7 @@ export class Game {
     $('room-input').value = '';
     $('btn-join-room').disabled = false;
     $('btn-host-room').textContent = 'СОЗДАТЬ КОМНАТУ';
+    this.buildCoopSettings();
     this.fillTurnFields();
     if (this.netRole === 'host' && this.lobbyCode) {
       $('host-info').classList.remove('hidden');
@@ -1179,6 +1185,74 @@ export class Game {
     if (!el) return;
     el.textContent = text;
     el.className = 'coop-status' + (cls ? ' ' + cls : '');
+  }
+
+  buildCoopSettings() {
+    const modes = $('coop-modes');
+    if (modes && !modes.children.length) {
+      for (const m of Object.values(RUN_MODES)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'coop-chip';
+        b.dataset.coopMode = m.id;
+        b.textContent = m.name;
+        b.addEventListener('click', () => this.setCoopMode(m.id));
+        modes.appendChild(b);
+      }
+    }
+    const diffs = $('coop-diffs');
+    if (diffs && !diffs.children.length) {
+      for (const d of DIFFICULTIES) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'coop-chip';
+        b.dataset.coopDiff = d.id;
+        b.textContent = d.name;
+        b.addEventListener('click', () => this.setCoopDifficulty(d.id));
+        diffs.appendChild(b);
+      }
+    }
+    this.refreshCoopSetup();
+  }
+
+  refreshCoopSetup() {
+    const guest = this.netRole === 'guest';
+    for (const el of document.querySelectorAll('[data-coop-mode]')) {
+      el.classList.toggle('active', el.dataset.coopMode === this.selectedMode);
+      el.disabled = guest;
+    }
+    for (const el of document.querySelectorAll('[data-coop-diff]')) {
+      el.classList.toggle('active', el.dataset.coopDiff === this.selectedDifficulty);
+      el.disabled = guest;
+    }
+    const note = $('coop-setup-note');
+    if (note) {
+      const mode = RUN_MODES[this.selectedMode];
+      const diff = DIFFICULTY_BY_ID[this.selectedDifficulty];
+      note.textContent = guest
+        ? `Хозяин: ${mode ? mode.name : '—'} · ${diff ? diff.name : '—'}`
+        : `Выбрано: ${mode ? mode.name : '—'} · ${diff ? diff.name : '—'}`;
+    }
+  }
+
+  setCoopMode(mode) {
+    if (this.netRole === 'guest') return;
+    this.selectMode(mode);
+    this.refreshCoopSetup();
+    this.sendCoopSettings();
+  }
+
+  setCoopDifficulty(id) {
+    if (this.netRole === 'guest') return;
+    this.selectDifficulty(id);
+    this.refreshCoopSetup();
+    this.sendCoopSettings();
+  }
+
+  sendCoopSettings() {
+    if (this.netRole === 'host' && this.peerJoined) {
+      this.net.send({ t: 'event', kind: 'settings', mode: this.selectedMode, difficulty: this.selectedDifficulty });
+    }
   }
 
   fillTurnFields() {
@@ -1244,6 +1318,7 @@ export class Game {
   onHosted(code) {
     this.netRole = 'host';
     this.lobbyCode = code;
+    this.refreshCoopSetup();
     $('host-info').classList.remove('hidden');
     $('room-code').textContent = code;
     $('btn-host-room').disabled = true;
@@ -1254,6 +1329,7 @@ export class Game {
   onJoined(code) {
     this.netRole = 'guest';
     this.lobbyCode = code;
+    this.refreshCoopSetup();
     this.setCoopStatus('join-status', 'Подключено. Ждём старта хозяина…', 'ok');
     this.ui.setHudVisible(false);
   }
@@ -1262,6 +1338,7 @@ export class Game {
     this.peerJoined = true;
     this.setCoopStatus('host-status', 'Друг подключён. Можно начинать.', 'ok');
     this.ui.feed('<b>Друг подключился</b>');
+    this.sendCoopSettings();
     if (this.runActive) {
       this.sendWelcome();
       if (this.inventoryOpen) this.net.send({ t: 'inv', open: true });
@@ -1438,7 +1515,7 @@ export class Game {
     if (this.avatar) { this.avatar.dispose(); this.avatar = null; }
     this.avatar = new PlayerAvatar(this, 'ХОЗЯИН');
     if (msg.player) this.setHostAvatar(msg.player);
-    this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+    this.ui.updateChests(this.chestTotal, this.chestsLooted);
     this.ui.updateHealth(this.player);
     this.ui.updateHotbar(this.player);
     this.ui.setAmmo(this.player);
@@ -1506,7 +1583,7 @@ export class Game {
     }
     if (typeof msg.chestsLooted === 'number') {
       this.chestsLooted = Math.max(this.chestsLooted, msg.chestsLooted);
-      this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+      this.ui.updateChests(this.chestTotal, this.chestsLooted);
     }
     if (typeof msg.remaining === 'number') this.guestRemaining = msg.remaining;
     this.updateGuestHud();
@@ -1640,7 +1717,7 @@ export class Game {
         if (chest && !chest.data.looted) {
           chest.markLootedQuiet();
           this.chestsLooted++;
-          this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+          this.ui.updateChests(this.chestTotal, this.chestsLooted);
           this.ui.feed('Друг забрал лут из сундука');
         }
         return;
@@ -1700,7 +1777,7 @@ export class Game {
         if (chest && !chest.data.looted) {
           chest.markLootedQuiet();
           this.chestsLooted++;
-          this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+          this.ui.updateChests(this.chestTotal, this.chestsLooted);
           this.ui.feed('Хозяин забрал лут из сундука');
         }
         return;
@@ -1759,6 +1836,11 @@ export class Game {
     } else if (msg.kind === 'boss') {
       this.sound.bossRoar();
       this.ui.banner('УГРОЗА', msg.name || 'БОСС', msg.sub || 'Земля дрожит. Не стойте на месте.', true, 4200);
+    } else if (msg.kind === 'settings') {
+      if (RUN_MODES[msg.mode]) this.selectedMode = msg.mode;
+      if (DIFFICULTY_BY_ID[msg.difficulty]) this.selectedDifficulty = msg.difficulty;
+      this.refreshSetupUi();
+      this.refreshCoopSetup();
     } else if (msg.kind === 'dungeon' && msg.seed != null) {
       this.enterDungeon(msg.seed, true);
     } else if (msg.kind === 'dungeonClear') {
@@ -2116,7 +2198,7 @@ export class Game {
   refreshChests(fromNet = false) {
     for (const c of this.chests) c.resetLoot();
     this.chestsLooted = 0;
-    this.ui.updateChests(CHEST_COUNT, 0);
+    this.ui.updateChests(this.chestTotal, 0);
     this.sound.chest();
     this.ui.banner('НОВЫЙ ЛУТ', 'СУНДУКИ ОБНОВЛЕНЫ', 'Через 5 минут появится следующая партия', false, 3400);
     this.ui.feed('<b>Сундуки обновлены</b> · новый лут');
@@ -2569,7 +2651,7 @@ export class Game {
       this.updateScrollHint();
     }
 
-    this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+    this.ui.updateChests(this.chestTotal, this.chestsLooted);
     this.updateHotbar();
     this.updateAmmo();
     this.effects.spawn(chest.data.x + 0.5, chest.data.y + 0.8, chest.data.z + 0.5, 0xffd27a, 26, {
@@ -2791,7 +2873,7 @@ export class Game {
     if (this.bossMob) this.ui.showBoss(this.bossMob.cfg.name, Math.max(0, this.bossMob.hp / this.bossMob.maxHp));
     $('minimap-wrap').classList.remove('hidden');
     $('chest-counter').classList.remove('hidden');
-    this.ui.updateChests(CHEST_COUNT, this.chestsLooted);
+    this.ui.updateChests(this.chestTotal, this.chestsLooted);
     this.updateScrollHint();
     this.ui.setHazard('');
     this.ui.banner('ВОЗВРАЩЕНИЕ', 'ОСТРОВ', 'Вы вернулись из логова', false, 2600);
