@@ -150,6 +150,7 @@ export class Game {
     this.compassTimer = 0;
     this.helpTimer = 0;
     this.input = { keys: {}, jumpPressed: false };
+    this.frozenInput = { keys: {}, jumpPressed: false };
     this.frame = 0;
 
     this.net = new Net(this);
@@ -1031,7 +1032,6 @@ export class Game {
     $('inventory').classList.remove('hidden');
     $('inv-remote').classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: true });
     this.sound.resume();
     this.sound.tone(520, 0.06, { type: 'triangle', gain: 0.06 });
   }
@@ -1040,7 +1040,6 @@ export class Game {
     if (!this.inventoryOpen) return;
     this.inventoryOpen = false;
     $('inventory').classList.add('hidden');
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: false });
     if (this.remoteInventory) {
       $('inv-remote').classList.remove('hidden');
       this.state = 'inventory';
@@ -1054,45 +1053,9 @@ export class Game {
     }
   }
 
-  onRemoteInventory(open, kind = 'inventory') {
-    if (this.state === 'menu' || this.state === 'victory' || this.state === 'defeat') return;
-    this.remoteInventory = !!open;
-    this.remoteModalKind = kind;
-    if (open) {
-      if (this.state === 'playing') {
-        this.state = 'inventory';
-        this.player.primaryDown = false;
-        this.player.secondaryDown = false;
-        this.player.aiming = false;
-      }
-      const isShop = kind === 'shop';
-      const isBench = kind === 'bench';
-      const isAlien = kind === 'alien';
-      const eyebrow = $('inv-remote-eyebrow');
-      const title = $('inv-remote-title');
-      const sub = $('inv-remote-sub');
-      if (eyebrow) eyebrow.textContent = isShop ? 'ТОРГОВЛЯ · СЕТЕВАЯ ИГРА' : isBench ? 'ВЕРСТАК · СЕТЕВАЯ ИГРА' : isAlien ? 'ПРИШЕЛЕЦ · СЕТЕВАЯ ИГРА' : 'ПАУЗА · СЕТЕВАЯ ИГРА';
-      if (title) title.textContent = isShop ? 'НАПАРНИК У ПИЖОНЧИКА' : isBench ? 'НАПАРНИК У СТОЛА' : isAlien ? 'НАПАРНИК У ПРИШЕЛЬЦА' : 'НАПАРНИК В ИНВЕНТАРЕ';
-      if (sub) sub.innerHTML = isShop
-        ? 'Друг закупается у Пижончика. Нажмите <b>I</b>, чтобы открыть свой инвентарь.'
-        : isBench
-          ? 'Друг возится с оружием. Нажмите <b>I</b>, чтобы открыть свой инвентарь.'
-          : isAlien
-            ? 'Друг торгуется с пришельцем. Нажмите <b>I</b>, чтобы открыть свой инвентарь.'
-            : 'Игра приостановлена для обоих. Нажмите <b>I</b>, чтобы открыть свой инвентарь.';
-      if (!this.inventoryOpen && !this.shopOpen && !this.benchOpen && !this.alienShopOpen) $('inv-remote').classList.remove('hidden');
-    } else {
-      if (!this.inventoryOpen && !this.shopOpen && !this.benchOpen && !this.alienShopOpen) {
-        $('inv-remote').classList.add('hidden');
-        if (this.state === 'inventory' || this.state === 'shop' || this.state === 'bench' || this.state === 'alien') {
-          this.state = 'playing';
-          this.player.primaryDown = false;
-          this.player.secondaryDown = false;
-          this.requestLock();
-          if (!document.pointerLockElement) this.ui.feed('Кликните по экрану, чтобы вернуть мышь');
-        }
-      }
-    }
+  onRemoteInventory() {
+    // меню больше не ставят игру на паузу; событие оставлено для совместимости
+    this.remoteInventory = false;
   }
 
   onInventoryClick(e) {
@@ -1382,7 +1345,6 @@ export class Game {
     this.sendCoopSettings();
     if (this.runActive) {
       this.sendWelcome(id);
-      if (this.inventoryOpen) this.net.send({ t: 'inv', open: true });
       this.ui.feed('<b>Друг в игре</b> · удачной охоты');
     }
   }
@@ -2580,7 +2542,8 @@ export class Game {
   }
 
   damagePlayer(amount, source, name) {
-    if (!this.player.alive || this.state !== 'playing') return;
+    if (!this.player.alive) return;
+    if (this.state !== 'playing' && !this.isMenuState()) return;
     if (this.player.invuln > 0) return;
     if (source) {
       const dx = this.player.pos.x - source.x;
@@ -2593,8 +2556,16 @@ export class Game {
     this.player.lastDamage = this.time;
   }
 
+  isMenuState() {
+    return this.state === 'inventory' || this.state === 'shop' || this.state === 'bench' || this.state === 'alien';
+  }
+
   onPlayerDeath() {
-    if (this.state !== 'playing') return;
+    if (this.state === 'menu' || this.state === 'victory' || this.state === 'defeat') return;
+    if (this.isMenuState()) {
+      this.resetInventoryUi();
+      this.state = 'playing';
+    }
     if (this.dungeonActive) {
       if (this.netRole === 'guest') {
         this.net.send({ t: 'event', kind: 'dungeonExitReq' });
@@ -3384,7 +3355,6 @@ export class Game {
     $('bench').classList.remove('hidden');
     $('inv-remote').classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: true, kind: 'bench' });
     this.sound.resume();
     this.sound.tone(540, 0.07, { type: 'square', gain: 0.05 });
   }
@@ -3394,7 +3364,6 @@ export class Game {
     this.benchOpen = false;
     this.activeBench = null;
     $('bench').classList.add('hidden');
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: false, kind: 'bench' });
     if (this.remoteInventory) {
       $('inv-remote').classList.remove('hidden');
       this.state = 'inventory';
@@ -3472,7 +3441,6 @@ export class Game {
     $('shop').classList.remove('hidden');
     $('inv-remote').classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: true, kind: 'shop' });
     this.sound.resume();
     this.sound.tone(620, 0.08, { type: 'triangle', gain: 0.06 });
   }
@@ -3481,7 +3449,6 @@ export class Game {
     if (!this.shopOpen) return;
     this.shopOpen = false;
     $('shop').classList.add('hidden');
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: false, kind: 'shop' });
     if (this.remoteInventory) {
       $('inv-remote').classList.remove('hidden');
       this.state = 'inventory';
@@ -3513,7 +3480,6 @@ export class Game {
     $('alien').classList.remove('hidden');
     $('inv-remote').classList.add('hidden');
     if (document.pointerLockElement) document.exitPointerLock();
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: true, kind: 'alien' });
     this.sound.resume();
     this.sound.tone(880, 0.12, { type: 'sine', gain: 0.06, slide: 1200 });
   }
@@ -3522,7 +3488,6 @@ export class Game {
     if (!this.alienShopOpen) return;
     this.alienShopOpen = false;
     $('alien').classList.add('hidden');
-    if (this.netRole && this.peerJoined) this.net.send({ t: 'inv', open: false, kind: 'alien' });
     if (this.remoteInventory) {
       $('inv-remote').classList.remove('hidden');
       this.state = 'inventory';
@@ -4206,9 +4171,9 @@ export class Game {
       this.updateSky(dt);
       this.updateWorldLights(dt);
       this.effects.update(dt * 0.6);
-    } else if (this.state === 'playing') {
+    } else if (this.state === 'playing' || this.state === 'inventory' || this.state === 'shop' || this.state === 'bench' || this.state === 'alien') {
       this.runTime += dt;
-      this.player.update(dt, this.input);
+      this.player.update(dt, this.state === 'playing' ? this.input : this.frozenInput);
       this.updateHazards(dt);
       if (!this.dungeonActive) this.checkAirshipRaid();
       for (let i = this.mobs.length - 1; i >= 0; i--) {

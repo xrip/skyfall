@@ -1603,6 +1603,9 @@ export class Pickup {
     this.amount = amount;
     this.meta = meta;
     this.baseY = pos.y;
+    this.y = pos.y + 0.4;
+    this.vy = 0;
+    this.settled = false;
     this.pos = pos.clone();
     this.dead = false;
     this.time = Math.random() * 6;
@@ -1709,10 +1712,26 @@ export class Pickup {
   update(dt) {
     if (this.dead) return;
     this.time += dt;
-    const y = this.baseY + 0.4 + Math.sin(this.time * 3) * 0.12;
+    if (!this.settled) {
+      this.vy -= 24 * dt;
+      this.y += this.vy * dt;
+      const gh = this.game.world.groundHeight(this.pos.x, this.pos.z);
+      if (gh > 0 && this.y <= gh + 0.35) {
+        this.y = gh + 0.35;
+        this.vy = 0;
+        this.settled = true;
+      } else if (this.y < -10) {
+        this.dead = true;
+        this.dispose();
+        const idx = this.game.pickups.indexOf(this);
+        if (idx >= 0) this.game.pickups.splice(idx, 1);
+        return;
+      }
+    }
+    const y = this.y + (this.settled ? Math.sin(this.time * 3) * 0.1 : 0);
     this.group.position.set(this.pos.x, y, this.pos.z);
     this.group.rotation.y += dt * 1.8;
-    this.ringMesh.position.set(this.pos.x, this.pos.y + 0.06, this.pos.z);
+    this.ringMesh.position.set(this.pos.x, this.y - 0.34, this.pos.z);
     this.ringMesh.rotation.z += dt * 1.4;
     this.ringMesh.material.opacity = 0.3 + Math.abs(Math.sin(this.time * 2)) * 0.3;
     const p = this.game.player;
