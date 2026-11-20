@@ -2003,6 +2003,7 @@ export class Game {
         for (let y = Math.min(w.SY - 3, cy + 8); y >= Math.max(1, cy - 10); y--) {
           if (!w.isSolid(x, y, z)) continue;
           if (w.isSolid(x, y + 1, z) || w.isSolid(x, y + 2, z)) continue;
+          if (BLOCKS[w.get(x, y, z)]?.hazard) break;
           ground[i + j * side] = y;
           break;
         }

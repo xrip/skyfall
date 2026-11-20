@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { MOBS, BLOCKS, ARMOR_SETS } from './config.js';
+import { MOBS, BLOCKS, ARMOR_SETS, HAZARD } from './config.js';
 
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const SPH = new THREE.SphereGeometry(1, 10, 8);
@@ -522,6 +522,7 @@ export class Mob {
     this.blockedByVoid = false;
     this.dormant = false;
     this.packId = -1;
+    this.hazardTick = 0;
 
     // AI state: сторона обхода, фланг и таймер решения
     this.aiSide = Math.random() < 0.5 ? 1 : -1;
@@ -620,6 +621,8 @@ export class Mob {
     const z = this.pos.z + dz * r;
     if (this.collidesAt(x, this.pos.y + 0.05, z)) return false;
     if (this.collidesAt(x, this.pos.y + Math.min(1.1, this.cfg.height * 0.65), z)) return false;
+    const belowId = this.game.world.get(Math.floor(x), Math.floor(this.pos.y - 0.08), Math.floor(z));
+    if (BLOCKS[belowId]?.hazard) return false;
     return true;
   }
 
@@ -763,6 +766,25 @@ export class Mob {
     if (this.dead) return;
     const game = this.game;
     this.animTime += dt;
+    // магма и колючая проволока жгут и мобов
+    const w = this.game.world;
+    if (w) {
+      const bx = Math.floor(this.pos.x);
+      const bz = Math.floor(this.pos.z);
+      const below = w.get(bx, Math.floor(this.pos.y - 0.08), bz);
+      const haz = BLOCKS[below]?.hazard;
+      if (haz === 'magma' || haz === 'wire') {
+        this.hazardTick += dt;
+        while (this.hazardTick >= HAZARD.tick) {
+          this.hazardTick -= HAZARD.tick;
+          this.takeDamage((haz === 'magma' ? HAZARD.magmaDps : 8) * HAZARD.tick, null, false, null);
+          if (this.dead) return;
+          if (haz === 'magma') game.effects.sparks(this.pos.x, this.pos.y + 0.3, this.pos.z, 0xff7a2a, 2);
+        }
+      } else {
+        this.hazardTick = 0;
+      }
+    }
     if (this.dormant) {
       this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
       this.group.rotation.y = this.yaw;
