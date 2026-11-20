@@ -151,6 +151,9 @@ export class Game {
     this.helpTimer = 0;
     this.input = { keys: {}, jumpPressed: false };
     this.frozenInput = { keys: {}, jumpPressed: false };
+    this.pathFields = new Map();
+    this.pathTimer = 0;
+    this.dungeonPacks = [];
     this.frame = 0;
 
     this.net = new Net(this);
@@ -711,6 +714,7 @@ export class Game {
     this.dungeonBoss = null;
     this.dungeonPortal = null;
     this.dungeonPortalMesh = null;
+    this.dungeonPacks = [];
     this.islandSave = null;
     this.ended = false;
     this.dying = false;
@@ -1959,16 +1963,128 @@ export class Game {
   }
 
   getMobTargets() {
-    const list = [{ pos: this.player.pos, vel: this.player.vel, alive: this.player.alive, remote: false }];
+    const list = [{ key: 'p', pos: this.player.pos, vel: this.player.vel, alive: this.player.alive, remote: false }];
     if (this.netRole === 'host' && this.peerJoined && this.remote.ready) {
-      list.push({ pos: this.remote.pos, alive: this.remote.alive, remote: true });
+      list.push({ key: 'r0', pos: this.remote.pos, alive: this.remote.alive, remote: true });
     }
     if (this.netRole === 'host') {
       for (const [id, player] of this.coopPlayers) {
-        if (player.ready) list.push({ pos: player.pos, alive: player.alive, remote: true, id });
+        if (player.ready) list.push({ key: 'r' + id, pos: player.pos, alive: player.alive, remote: true, id });
       }
     }
     return list;
+  }
+
+  hasLineOfSight(from, to) {
+    if (!this.world) return true;
+    const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist < 0.05) return true;
+    const dir = new THREE.Vector3(dx / dist, dy / dist, dz / dist);
+    return !this.world.raycast(from, dir, Math.max(0.1, dist - 0.4));
+  }
+
+  // Волновое поле кратчайших путей: один BFS на цель, все мобы идут по градиенту.
+  buildPathField(pos) {
+    const w = this.world;
+    if (!w) return null;
+    const R = 20;
+    const side = R * 2 + 1;
+    const x0 = Math.floor(pos.x) - R;
+    const z0 = Math.floor(pos.z) - R;
+    const cy = Math.floor(pos.y);
+    const ground = new Int16Array(side * side).fill(-1);
+    const dist = new Int16Array(side * side).fill(-1);
+    for (let j = 0; j < side; j++) {
+      const z = z0 + j;
+      for (let i = 0; i < side; i++) {
+        const x = x0 + i;
+        if (x < 1 || z < 1 || x >= w.SX - 1 || z >= w.SZ - 1) continue;
+        for (let y = Math.min(w.SY - 3, cy + 8); y >= Math.max(1, cy - 10); y--) {
+          if (!w.isSolid(x, y, z)) continue;
+          if (w.isSolid(x, y + 1, z) || w.isSolid(x, y + 2, z)) continue;
+          ground[i + j * side] = y;
+          break;
+        }
+      }
+    }
+    const si = Math.floor(pos.x) - x0;
+    const sj = Math.floor(pos.z) - z0;
+    const start = si + sj * side;
+    if (ground[start] < 0) return null;
+    dist[start] = 0;
+    const queue = [start];
+    for (let qi = 0; qi < queue.length; qi++) {
+      const cur = queue[qi];
+      const ci = cur % side;
+      const cj = Math.floor(cur / side);
+      const cg = ground[cur];
+      const nd = dist[cur] + 1;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = ci + di, nj = cj + dj;
+        if (ni < 0 || nj < 0 || ni >= side || nj >= side) continue;
+        const n = ni + nj * side;
+        if (dist[n] >= 0) continue;
+        const ng = ground[n];
+        if (ng < 0) continue;
+        if (Math.abs(ng - cg) > 1) continue;
+        dist[n] = nd;
+        queue.push(n);
+      }
+    }
+    return { x0, z0, side, dist, ground };
+  }
+
+  pathDir(pos, target) {
+    if (!target || !target.key) return null;
+    const f = this.pathFields.get(target.key);
+    if (!f) return null;
+    const i = Math.floor(pos.x) - f.x0;
+    const j = Math.floor(pos.z) - f.z0;
+    if (i < 1 || j < 1 || i >= f.side - 1 || j >= f.side - 1) return null;
+    const cur = i + j * f.side;
+    if (f.dist[cur] < 0) return null;
+    let best = -1;
+    let bestD = f.dist[cur];
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const n = (i + di) + (j + dj) * f.side;
+        const d = f.dist[n];
+        if (d >= 0 && d < bestD) { bestD = d; best = n; }
+      }
+    }
+    if (best < 0) return null;
+    const bx = f.x0 + (best % f.side) + 0.5;
+    const bz = f.z0 + Math.floor(best / f.side) + 0.5;
+    const dx = bx - pos.x, dz = bz - pos.z;
+    const len = Math.hypot(dx, dz) || 1;
+    return { x: dx / len, z: dz / len };
+  }
+
+  updatePathFields(dt) {
+    this.pathTimer -= dt;
+    if (this.pathTimer > 0) return;
+    this.pathTimer = 0.5;
+    const alive = this.getMobTargets().filter((t) => t.alive);
+    const keys = new Set();
+    for (const t of alive) {
+      keys.add(t.key);
+      const f = this.buildPathField(t.pos);
+      if (f) this.pathFields.set(t.key, f);
+      else this.pathFields.delete(t.key);
+    }
+    for (const k of [...this.pathFields.keys()]) if (!keys.has(k)) this.pathFields.delete(k);
+  }
+
+  wakePack(packId) {
+    const pack = this.dungeonPacks[packId];
+    if (!pack || pack.awake) return;
+    pack.awake = true;
+    for (const m of pack.mobs) if (m && !m.dead) m.dormant = false;
+    this.effects.ring(pack.x, (pack.mobs[0]?.pos.y ?? this.player.pos.y) + 0.1, pack.z, 0x8ef0ff, 5, 0.7);
+    this.sound.tone(140, 0.24, { type: 'sawtooth', gain: 0.11, slide: 90 });
+    this.ui.feed('<b>ПРИХВОСТНИ ПРОСНУЛИСЬ</b>', true);
   }
 
   damageTarget(target, amount, source, name) {
@@ -2201,6 +2317,11 @@ export class Game {
     const len = cfg.lineLen ?? 18;
     for (const t of this.getMobTargets()) {
       if (!t.alive) continue;
+      const eye = from.clone();
+      eye.y += cfg.height * 0.6;
+      const chest = t.pos.clone();
+      chest.y += 1.1;
+      if (!this.hasLineOfSight(eye, chest)) continue;
       const rx = t.pos.x - from.x, rz = t.pos.z - from.z;
       const along = rx * dx + rz * dz;
       const side = Math.abs(-rx * dz + rz * dx);
@@ -3016,21 +3137,36 @@ export class Game {
     }
     if (this.netRole !== 'guest') {
       const mins = MOBS[this.dungeonBossKey].minions;
-      for (let i = 0; i < d.spawns.length; i++) {
-        const p = d.spawns[i];
-        const type = mins[i % 2];
-        this.spawnMob(type, { x: p.x, y: p.y, z: p.z });
-        const mob = this.mobs[this.mobs.length - 1];
-        if (!mob || mob.type !== type) continue;
-        if (mob.cfg.flying) {
-          mob.pos.y = p.y + 1.5;
-          mob.group.position.copy(mob.pos);
+      const packSize = 5;
+      this.dungeonPacks = [];
+      // группы вдоль пути: каждая пятая точка — центр отряда, вокруг него 5 мобов
+      const centers = d.spawns.filter((_, i) => i % packSize === 0);
+      for (let ci = 0; ci < centers.length; ci++) {
+        const c = centers[ci];
+        const pack = { x: c.x, z: c.z, mobs: [], awake: false };
+        for (let k = 0; k < packSize; k++) {
+          const a = (k / packSize) * Math.PI * 2 + (c.x + c.z) * 0.13;
+          const px = c.x + Math.cos(a) * 1.5;
+          const pz = c.z + Math.sin(a) * 1.5;
+          const type = mins[(ci + k) % 2];
+          this.spawnMob(type, { x: px, y: c.y, z: pz });
+          const mob = this.mobs[this.mobs.length - 1];
+          if (!mob || mob.type !== type) continue;
+          if (mob.cfg.flying) {
+            mob.pos.y = c.y + 1.5;
+            mob.group.position.copy(mob.pos);
+          }
+          if (mob.pos.y < c.y - 0.6 || mob.pos.y > c.y + 3.2) {
+            // страховка: прихвостень не должен оказаться на крыше пещеры
+            this.mobs.pop();
+            mob.dispose();
+            continue;
+          }
+          mob.dormant = true;
+          mob.packId = this.dungeonPacks.length;
+          pack.mobs.push(mob);
         }
-        if (mob.pos.y < p.y - 0.6 || mob.pos.y > p.y + 3.2) {
-          // страховка: прихвостень не должен оказаться на крыше пещеры
-          this.mobs.pop();
-          mob.dispose();
-        }
+        if (pack.mobs.length) this.dungeonPacks.push(pack);
       }
     }
     this.ui.banner('ПОДЗЕМЕЛЬЕ', MOBS[this.dungeonBossKey].title, 'Прихвостни на пути. Найдите логово.', true, 4400);
@@ -3049,6 +3185,7 @@ export class Game {
 
     for (const m of this.mobs.slice()) m.dispose();
     this.mobs.length = 0;
+    this.dungeonPacks = [];
     for (const p of this.pickups.slice()) p.dispose();
     this.pickups.length = 0;
     for (const c of this.chests.slice()) c.dispose();
@@ -3115,10 +3252,24 @@ export class Game {
 
   updateDungeon(dt) {
     const cfg = MOBS[this.dungeonBossKey];
+    if (this.netRole !== 'guest' && this.dungeonPacks.length) {
+      const targets = this.getMobTargets();
+      for (let i = 0; i < this.dungeonPacks.length; i++) {
+        const pack = this.dungeonPacks[i];
+        if (pack.awake) continue;
+        for (const t of targets) {
+          if (!t.alive) continue;
+          if (Math.hypot(t.pos.x - pack.x, t.pos.z - pack.z) < 11) {
+            this.wakePack(i);
+            break;
+          }
+        }
+      }
+    }
     if (!this.dungeonBoss && !this.dungeonPortal && this.netRole !== 'guest') {
       const b = this.world.dungeon.boss;
-      const d = Math.hypot(this.player.pos.x - b.x, this.player.pos.z - b.z);
-      if (d < 15) this.spawnDungeonBoss();
+      const near = this.getMobTargets().some((t) => t.alive && Math.hypot(t.pos.x - b.x, t.pos.z - b.z) < 15);
+      if (near) this.spawnDungeonBoss();
     }
     if (this.dungeonPortalMesh) {
       this.dungeonPortalMesh.rotation.y += dt * 0.9;
@@ -4176,6 +4327,7 @@ export class Game {
       this.player.update(dt, this.state === 'playing' ? this.input : this.frozenInput);
       this.updateHazards(dt);
       if (!this.dungeonActive) this.checkAirshipRaid();
+      if (this.netRole !== 'guest') this.updatePathFields(dt);
       for (let i = this.mobs.length - 1; i >= 0; i--) {
         const m = this.mobs[i];
         if (!m.dead) {

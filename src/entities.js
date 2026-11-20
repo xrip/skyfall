@@ -520,6 +520,8 @@ export class Mob {
     this.netReady = false;
     this.pendingCast = false;
     this.blockedByVoid = false;
+    this.dormant = false;
+    this.packId = -1;
 
     // AI state: сторона обхода, фланг и таймер решения
     this.aiSide = Math.random() < 0.5 ? 1 : -1;
@@ -747,10 +749,26 @@ export class Mob {
     if (this.pos.y > 76) this.pos.y = 76;
   }
 
+  canSee(target) {
+    if (!target || !target.pos) return false;
+    if (!this.game.hasLineOfSight) return true;
+    const from = this.pos.clone();
+    from.y += this.cfg.height * 0.72;
+    const to = target.pos.clone();
+    to.y += 1.1;
+    return this.game.hasLineOfSight(from, to);
+  }
+
   update(dt) {
     if (this.dead) return;
     const game = this.game;
     this.animTime += dt;
+    if (this.dormant) {
+      this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
+      this.group.rotation.y = this.yaw;
+      this.animate(dt, 0);
+      return;
+    }
     this.attackCd -= dt;
     this.rockCd -= dt;
     if (this.hitFlash > 0) {
@@ -791,7 +809,7 @@ export class Mob {
         this.attackWind = 0.28;
         this.pendingCast = false;
         game.sound.tone(120, 0.12, { type: 'sawtooth', gain: 0.12, slide: 60 });
-      } else if (this.cfg.caster && distH <= this.cfg.castRange && dy < 4.5) {
+      } else if (this.cfg.caster && distH <= this.cfg.castRange && dy < 4.5 && this.canSee(target)) {
         this.attackCd = this.cfg.castCd ?? this.cfg.attackCd;
         this.attackWind = 0.38;
         this.pendingCast = true;
@@ -810,7 +828,7 @@ export class Mob {
           const t = this.target;
           if (t && t.alive) {
             const d2 = Math.hypot(t.pos.x - this.pos.x, t.pos.z - this.pos.z);
-            if (d2 <= this.cfg.range + 0.5 && Math.abs(t.pos.y - this.pos.y) < 2.4) {
+            if (d2 <= this.cfg.range + 0.5 && Math.abs(t.pos.y - this.pos.y) < 2.4 && this.canSee(t)) {
               game.damageTarget(t, this.cfg.dmg, this.pos, this.cfg.name);
             }
           }
@@ -932,20 +950,23 @@ export class Mob {
     const keepAt = cfg.keepDistance ?? cfg.range * 0.55;
     const forwardFree = this.probeFree(dirX, dirZ, 0.35);
     const aheadFree = this.probeFree(dirX, dirZ, 1.45);
+    // кратчайший путь по волновому полю, если он есть
+    const path = this.game.pathDir ? this.game.pathDir(this.pos, target) : null;
+    const pathFree = path ? this.probeFree(path.x, path.z, 0.35) : false;
 
     this.aiTurn = Math.max(0, this.aiTurn - dt);
     if (forwardFree && aheadFree) this.aiAngle = null;
 
-    if (!forwardFree && this.attackWind <= 0) {
-      this.tryBreakBlock(dt, dirX, dirZ, distH, target);
-    } else if (forwardFree) {
+    if (forwardFree) {
       this.breakProgress = 0;
       this.breakKey = null;
     }
 
     if (this.attackWind <= 0) {
       if (distH > stopAt) {
-        if (forwardFree && aheadFree) {
+        if (path && pathFree) {
+          mx = path.x * speed; mz = path.z * speed;
+        } else if (forwardFree && aheadFree) {
           let ax = dirX, az = dirZ;
           // фланг: подходим по дуге, чтобы не выстраиваться в очередь
           if (!cfg.caster) {
@@ -1053,6 +1074,7 @@ export class Mob {
   fireCast() {
     const target = this.target;
     if (!target || !target.alive) return;
+    if (!this.canSee(target)) return;
     const cfg = this.cfg;
     const from = this.pos.clone();
     from.y += cfg.height * 0.72;
@@ -1114,7 +1136,7 @@ export class Mob {
     }
 
     const d = Math.hypot(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
-    if (this.attackCd <= 0 && d < (cfg.castRange ?? 19)) {
+    if (this.attackCd <= 0 && d < (cfg.castRange ?? 19) && this.canSee(target)) {
       this.attackCd = cfg.attackCd;
       const from = this.pos.clone().add(new THREE.Vector3(0, h * 0.55, 0));
       const to = this.predictAim(target, from, cfg.projSpeed ?? 17);
@@ -1154,6 +1176,10 @@ export class Mob {
 
   takeDamage(dmg, hit, headshot, by = null) {
     if (this.dead) return;
+    if (this.dormant) {
+      this.dormant = false;
+      this.game.wakePack?.(this.packId);
+    }
     if (by) this.lastHitBy = by;
     this.hp -= dmg;
     this.hitFlash = 0.1;
